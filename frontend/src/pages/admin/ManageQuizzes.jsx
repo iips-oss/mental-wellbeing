@@ -35,34 +35,10 @@ const ManageQuizzes = () => {
       setLoading(true);
       setError("");
       try {
-        const events = await AuthService.getAdminEvents();
-
-        // For each event, fetch its assigned QuizTemplate rows and flatten
-        // into one list of { quiz + event } records for this table.
-        const perEventResults = await Promise.all(
-          events.map(async (event) => {
-            try {
-              const eventQuizzes = await AuthService.getEventQuizzes(event.id);
-              return eventQuizzes.map((q) => ({
-                quizTemplateId: q.id,
-                quiz_type: q.quiz_type,
-                title: q.title,
-                eventId: event.id,
-                eventTitle: event.title,
-                eventDate: event.event_date,
-                eventTime: event.event_time,
-                eventStatus: event.status
-              }));
-            } catch (err) {
-              console.error(`Failed to load quizzes for event ${event.id}:`, err);
-              return [];
-            }
-          })
-        );
-
-        setQuizzes(perEventResults.flat());
+        const data = await AuthService.getAllQuizTemplates();
+        setQuizzes(data);
       } catch (err) {
-        console.error("Failed to load events/quizzes:", err);
+        console.error("Failed to load quizzes:", err);
         setError("Failed to load quizzes. Please try again.");
       } finally {
         setLoading(false);

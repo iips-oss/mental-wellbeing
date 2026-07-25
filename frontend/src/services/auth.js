@@ -55,6 +55,14 @@ const AuthService = {
     return response.data;
   },
 
+  // Returns every QuizTemplate across all events in one call, already joined
+  // with its event's title/date/time/status. Avoids the N+1 pattern of
+  // calling getEventQuizzes once per event.
+  getAllQuizTemplates: async () => {
+    const response = await API.get("/admin/quiz-templates");
+    return response.data;
+  },
+
   getEventResults: async (eventId) => {
     const response = await API.get(`/admin/events/${eventId}/results`);
     return response.data;
