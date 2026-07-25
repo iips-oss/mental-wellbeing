@@ -326,6 +326,31 @@ def get_event_quizzes(
     return quizzes
 
 
+@router.get("/quiz-templates")
+def get_all_quiz_templates(
+    db: Session = Depends(get_db),
+    current_user = Depends(require_role("admin"))
+):
+    results = db.query(QuizTemplate, Event)\
+        .join(Event, QuizTemplate.event_id == Event.id)\
+        .order_by(Event.event_date.desc())\
+        .all()
+
+    return [
+        {
+            "quizTemplateId": str(quiz.id),
+            "quiz_type": quiz.quiz_type,
+            "title": quiz.title,
+            "eventId": str(event.id),
+            "eventTitle": event.title,
+            "eventDate": event.event_date.isoformat(),
+            "eventTime": event.event_time.strftime("%H:%M") if hasattr(event.event_time, 'strftime') else str(event.event_time),
+            "eventStatus": event.status
+        }
+        for quiz, event in results
+    ]
+
+
 @router.post("/events/{event_id}/quizzes")
 def add_quiz_to_event(
     event_id: str,
