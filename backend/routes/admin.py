@@ -219,13 +219,9 @@ def update_event(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id= current_user.id
-
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    # Any admin may edit any event — admin_id on Event records who created it,
+    # it isn't an access-control boundary between admins.
+    event = db.query(Event).filter(Event.id == event_id).first()
 
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -255,13 +251,7 @@ def cancel_event(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    event = db.query(Event).filter(Event.id == event_id).first()
 
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -287,14 +277,8 @@ async def upload_report(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    # CHECK 1: event exists and belongs to this admin
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    # CHECK 1: event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
 
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -328,14 +312,8 @@ def get_event_quizzes(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    # CHECK: event belongs to this admin
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    # CHECK: event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
 
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -355,14 +333,8 @@ def add_quiz_to_event(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    # CHECK: event belongs to this admin
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    # CHECK: event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
 
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -396,13 +368,7 @@ def get_scq_results(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
@@ -439,13 +405,7 @@ def get_gwbs_results(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
@@ -482,13 +442,7 @@ def get_tabbps_results(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
@@ -529,13 +483,7 @@ def get_ei_results(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
@@ -588,13 +536,7 @@ def get_overall_results(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
@@ -661,14 +603,8 @@ def get_event_results(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("admin"))
 ):
-    
-    admin_id = current_user.id
-
-    # CHECK: event belongs to this admin
-    event = db.query(Event).filter(
-        Event.id == event_id,
-        Event.admin_id == admin_id
-    ).first()
+    # CHECK: event exists
+    event = db.query(Event).filter(Event.id == event_id).first()
 
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")

@@ -11,17 +11,21 @@ const DashboardLayout = () => {
     department: "Senior Technical Faculty, IIPS DAVV"
   });
 
-  useEffect(() => {
+  const fetchAdminInfo = () => {
     AuthService.getMe()
       .then((data) => {
         setAdminInfo({
           name: data.name || "Dr. Yasmin Sheikh",
-          department: data.department || "Senior Technical Faculty, IIPS DAVV"
+          department: data.department || "Senior Technical Faculty , IIPS DAVV"
         });
       })
       .catch((err) => {
         console.error("Error fetching admin profile info:", err);
       });
+  };
+
+  useEffect(() => {
+    fetchAdminInfo();
   }, []);
 
   const handleLogout = () => {
@@ -108,7 +112,7 @@ const DashboardLayout = () => {
 
       {/* Main Area */}
       <main className="flex-1 overflow-y-auto h-screen p-8 bg-[#FAF8F5]">
-        <Outlet />
+        <Outlet context={{ refreshAdminInfo: fetchAdminInfo }} />
       </main>
     </div>
   );

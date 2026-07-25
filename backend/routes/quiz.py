@@ -7,7 +7,8 @@ from models.student import Student
 from services.quiz_scoring import compute_quiz_result
 from datetime import datetime
 from services.auth import require_role 
-from schemas.quiz import QuizOut, QuizSubmit
+from schemas.quiz import QuizOut, QuizSubmit        
+
 
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
@@ -98,16 +99,13 @@ def get_quiz(
 def submit_quiz(
     data: QuizSubmit,
     db: Session = Depends(get_db),
-    current_user = Depends(require_role("student"))
+    current_user=Depends(require_role("student"))
 ):
-    
-
     student_id = current_user.id
-
     quiz_template_id = data.quiz_template_id
     answers = data.answers
 
-    # CHECK 1: does quiz template exist?
+    # Check quiz exists
     quiz = db.query(QuizTemplate).filter(
         QuizTemplate.id == quiz_template_id
     ).first()
@@ -115,7 +113,7 @@ def submit_quiz(
     if not quiz:
         raise HTTPException(status_code=404, detail="Quiz not found")
 
-    # CHECK 2: has student already submitted this quiz?
+    # Check already submitted
     existing_attempt = db.query(QuizAttempt).filter(
         QuizAttempt.quiz_template_id == quiz_template_id,
         QuizAttempt.student_id == student_id,
@@ -123,43 +121,128 @@ def submit_quiz(
     ).first()
 
     if existing_attempt:
-        raise HTTPException(status_code=400, detail="You have already submitted this quiz")
+        raise HTTPException(
+            status_code=400,
+            detail="You have already submitted this quiz"
+        )
 
-    # CHECK 3: has student RSVPed to this event?
+    # Check RSVP
     rsvp = db.query(EventRSVP).filter(
         EventRSVP.event_id == quiz.event_id,
         EventRSVP.student_id == student_id
     ).first()
 
     if not rsvp:
-        raise HTTPException(status_code=403, detail="You have not registered for this event")
+        raise HTTPException(
+            status_code=403,
+            detail="You have not registered for this event"
+        )
 
-    # get student gender for GWBS scoring
-    student = db.query(Student).filter(Student.id == student_id).first()
+    # Get student gender for GWBS
+    student = db.query(Student).filter(
+        Student.id == student_id
+    ).first()
+
     gender = student.gender if student else "male"
 
-    # compute result using existing scoring service
+    # ---------------------------------------------------------
+    # Convert question UUID -> option UUID
+    # into question number -> score
+    # ---------------------------------------------------------
+
+    if quiz.quiz_type == "TABBPS":
+
+        scoring_answers = {
+            "A": {},
+            "B": {}
+        }
+
+        for form in ["A", "B"]:
+            form_answers = answers.get(form, {})
+
+            if not isinstance(form_answers, dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid answers for Form {form}"
+                )
+
+            for question_id, selected_option_id in form_answers.items():
+
+                question = db.query(QuizQuestion).filter(
+                    QuizQuestion.id == question_id,
+                    QuizQuestion.quiz_template_id == quiz_template_id
+                ).first()
+
+                if not question:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid question: {question_id}"
+                    )
+
+                option = db.query(QuizOption).filter(
+                    QuizOption.id == selected_option_id
+                ).first()
+
+                if not option:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid option: {selected_option_id}"
+                    )
+
+                scoring_answers[form][question.question_no] = (
+                    option.score_value
+                )
+
+    else:
+
+        scoring_answers = {}
+
+        for question_id, selected_option_id in answers.items():
+
+            question = db.query(QuizQuestion).filter(
+                QuizQuestion.id == question_id,
+                QuizQuestion.quiz_template_id == quiz_template_id
+            ).first()
+
+            if not question:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid question: {question_id}"
+                )
+
+            option = db.query(QuizOption).filter(
+                QuizOption.id == selected_option_id
+            ).first()
+
+            if not option:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid option: {selected_option_id}"
+                )
+
+            scoring_answers[question.question_no] = option.score_value
+
+    # Calculate quiz result
     result_json = compute_quiz_result(
         quiz_type=quiz.quiz_type,
-        answers=answers,
+        answers=scoring_answers,
         gender=gender
     )
 
-    # get or create attempt
+    # Get existing unfinished attempt
     attempt = db.query(QuizAttempt).filter(
         QuizAttempt.quiz_template_id == quiz_template_id,
         QuizAttempt.student_id == student_id
     ).first()
 
     if attempt:
-        # update existing attempt
         attempt.status = "submitted"
         attempt.attempted_at = datetime.now()
         attempt.total_score = result_json.get("total_score")
         attempt.overall_remark = result_json.get("interpretation")
         attempt.result_json = result_json
+
     else:
-        # create new attempt
         attempt = QuizAttempt(
             quiz_template_id=quiz_template_id,
             student_id=student_id,
@@ -169,29 +252,54 @@ def submit_quiz(
             overall_remark=result_json.get("interpretation"),
             result_json=result_json
         )
+
         db.add(attempt)
 
-    db.flush() #flush to get attempt.id before committing
-    db.refresh(attempt)
+    db.flush()
 
-    # save individual responses
-    for question_id, selected_option_id in answers.items():
-        # get score for selected option
-        option = db.query(QuizOption).filter(
-            QuizOption.id == selected_option_id
-        ).first()
+    # ---------------------------------------------------------
+    # Save individual QuizResponse rows
+    # ---------------------------------------------------------
 
-        score_awarded = option.score_value if option else 0
+    if quiz.quiz_type == "TABBPS":
 
-        response = QuizResponse(
-            attempt_id=attempt.id,
-            question_id=question_id,
-            selected_option_id=selected_option_id,
-            score_awarded=score_awarded
-        )
-        db.add(response)
+        for form in ["A", "B"]:
+            form_answers = answers.get(form, {})
+
+            for question_id, selected_option_id in form_answers.items():
+
+                option = db.query(QuizOption).filter(
+                    QuizOption.id == selected_option_id
+                ).first()
+
+                response = QuizResponse(
+                    attempt_id=attempt.id,
+                    question_id=question_id,
+                    selected_option_id=selected_option_id,
+                    score_awarded=option.score_value
+                )
+
+                db.add(response)
+
+    else:
+
+        for question_id, selected_option_id in answers.items():
+
+            option = db.query(QuizOption).filter(
+                QuizOption.id == selected_option_id
+            ).first()
+
+            response = QuizResponse(
+                attempt_id=attempt.id,
+                question_id=question_id,
+                selected_option_id=selected_option_id,
+                score_awarded=option.score_value
+            )
+
+            db.add(response)
 
     db.commit()
+    db.refresh(attempt)
 
     return {
         "message": "Quiz submitted successfully",

@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr
 
 from database import get_db
 from models.student import Student
-from models.admin import Admin
+from models.admin import Admin, ProfileUpdate
 from schemas.student import StudentCreate, StudentOut
 from schemas.admin import AdminCreate, AdminOut
 from schemas.auth import TokenResponse
@@ -172,4 +172,30 @@ def get_me(current_user=Depends(get_current_user)):
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role,
+        "department": getattr(current_user, "department", None)
+    }
+@router.patch("/me")
+def update_me(
+    data: ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if data.name is not None:
+        current_user.name = data.name
+    if data.email is not None:
+        current_user.email = data.email
+    if data.department is not None:
+        if not hasattr(current_user, "department"):
+            raise HTTPException(status_code=400, detail="This account type does not support a department field")
+        current_user.department = data.department
+
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "id": str(current_user.id),
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
+        "department": getattr(current_user, "department", None),
     }
