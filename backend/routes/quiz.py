@@ -95,6 +95,40 @@ def get_quiz(
     return result
 
 
+def _validate_and_score_answer(db: Session, quiz_template_id: str, question_id: str, selected_option_id: str):
+    """
+    Validates that:
+      1. question_id belongs to this quiz template
+      2. selected_option_id belongs to that question's option set (not just
+         any valid option in the DB — this is the check that was missing)
+
+    Returns (question, option) on success, raises HTTPException on failure.
+    """
+    question = db.query(QuizQuestion).filter(
+        QuizQuestion.id == question_id,
+        QuizQuestion.quiz_template_id == quiz_template_id
+    ).first()
+
+    if not question:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid question: {question_id}"
+        )
+
+    option = db.query(QuizOption).filter(
+        QuizOption.id == selected_option_id,
+        QuizOption.option_set_id == question.option_set_id
+    ).first()
+
+    if not option:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid option for question {question_id}"
+        )
+
+    return question, option
+
+
 @router.post("/submit")
 def submit_quiz(
     data: QuizSubmit,
@@ -146,16 +180,17 @@ def submit_quiz(
     gender = student.gender if student else "male"
 
     # ---------------------------------------------------------
-    # Convert question UUID -> option UUID
-    # into question number -> score
+    # Validate every answer once, building both:
+    #   - scoring_answers: question number -> score (for compute_quiz_result)
+    #   - response_rows: the QuizResponse objects to persist
+    # in a single pass, instead of two separate passes that each
+    # re-fetched (and previously under-validated) the same options.
     # ---------------------------------------------------------
 
-    if quiz.quiz_type == "TABBPS":
+    response_rows = []
 
-        scoring_answers = {
-            "A": {},
-            "B": {}
-        }
+    if quiz.quiz_type == "TABBPS":
+        scoring_answers = {"A": {}, "B": {}}
 
         for form in ["A", "B"]:
             form_answers = answers.get(form, {})
@@ -167,60 +202,29 @@ def submit_quiz(
                 )
 
             for question_id, selected_option_id in form_answers.items():
-
-                question = db.query(QuizQuestion).filter(
-                    QuizQuestion.id == question_id,
-                    QuizQuestion.quiz_template_id == quiz_template_id
-                ).first()
-
-                if not question:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid question: {question_id}"
-                    )
-
-                option = db.query(QuizOption).filter(
-                    QuizOption.id == selected_option_id
-                ).first()
-
-                if not option:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Invalid option: {selected_option_id}"
-                    )
-
-                scoring_answers[form][question.question_no] = (
-                    option.score_value
+                question, option = _validate_and_score_answer(
+                    db, quiz_template_id, question_id, selected_option_id
                 )
+                scoring_answers[form][question.question_no] = option.score_value
+                response_rows.append({
+                    "question_id": question_id,
+                    "selected_option_id": selected_option_id,
+                    "score_awarded": option.score_value
+                })
 
     else:
-
         scoring_answers = {}
 
         for question_id, selected_option_id in answers.items():
-
-            question = db.query(QuizQuestion).filter(
-                QuizQuestion.id == question_id,
-                QuizQuestion.quiz_template_id == quiz_template_id
-            ).first()
-
-            if not question:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid question: {question_id}"
-                )
-
-            option = db.query(QuizOption).filter(
-                QuizOption.id == selected_option_id
-            ).first()
-
-            if not option:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid option: {selected_option_id}"
-                )
-
+            question, option = _validate_and_score_answer(
+                db, quiz_template_id, question_id, selected_option_id
+            )
             scoring_answers[question.question_no] = option.score_value
+            response_rows.append({
+                "question_id": question_id,
+                "selected_option_id": selected_option_id,
+                "score_awarded": option.score_value
+            })
 
     # Calculate quiz result
     result_json = compute_quiz_result(
@@ -258,45 +262,27 @@ def submit_quiz(
     db.flush()
 
     # ---------------------------------------------------------
-    # Save individual QuizResponse rows
+    # Clear any pre-existing responses for this attempt before inserting
+    # the new ones. Without this, resubmitting against an attempt that
+    # already has QuizResponse rows (e.g. a pre-created 'not_attempted' or
+    # 'in_progress' attempt with partial responses saved) would duplicate
+    # rows for the same (attempt_id, question_id) instead of replacing them.
+    # ---------------------------------------------------------
+    db.query(QuizResponse).filter(QuizResponse.attempt_id == attempt.id).delete()
+
+    # ---------------------------------------------------------
+    # Save individual QuizResponse rows using the already-validated
+    # question/option pairs from the pass above.
     # ---------------------------------------------------------
 
-    if quiz.quiz_type == "TABBPS":
-
-        for form in ["A", "B"]:
-            form_answers = answers.get(form, {})
-
-            for question_id, selected_option_id in form_answers.items():
-
-                option = db.query(QuizOption).filter(
-                    QuizOption.id == selected_option_id
-                ).first()
-
-                response = QuizResponse(
-                    attempt_id=attempt.id,
-                    question_id=question_id,
-                    selected_option_id=selected_option_id,
-                    score_awarded=option.score_value
-                )
-
-                db.add(response)
-
-    else:
-
-        for question_id, selected_option_id in answers.items():
-
-            option = db.query(QuizOption).filter(
-                QuizOption.id == selected_option_id
-            ).first()
-
-            response = QuizResponse(
-                attempt_id=attempt.id,
-                question_id=question_id,
-                selected_option_id=selected_option_id,
-                score_awarded=option.score_value
-            )
-
-            db.add(response)
+    for row in response_rows:
+        response = QuizResponse(
+            attempt_id=attempt.id,
+            question_id=row["question_id"],
+            selected_option_id=row["selected_option_id"],
+            score_awarded=row["score_awarded"]
+        )
+        db.add(response)
 
     db.commit()
     db.refresh(attempt)
