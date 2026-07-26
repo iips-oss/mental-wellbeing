@@ -212,6 +212,7 @@ def update_me(
         "session": getattr(current_user, "session", None),
         "enrollment": getattr(current_user, "enrollment_no", None),
     }
+
 @router.get("/me")
 def get_me(current_user=Depends(get_current_user)):
     return {
@@ -224,4 +225,5 @@ def get_me(current_user=Depends(get_current_user)):
         "semester": getattr(current_user, "semester", None),
         "session": getattr(current_user, "session", None),
         "enrollment": getattr(current_user, "enrollment_no", None),
+        "phone": getattr(current_user, "phone", None),   # NEW
     }

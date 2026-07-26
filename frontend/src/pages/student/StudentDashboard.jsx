@@ -1,22 +1,80 @@
 import React, { useState, useEffect } from "react";
 import AuthService from "../../services/auth";
+import StudentService from "../../services/student";
 import { Smile, Brain, ClipboardList, Calendar, Bell } from "lucide-react";
 
+const TOTAL_ASSESSMENT_TYPES = 4; // SCQ, GWBS, TABBPS, EI — fixed set
+
 const StudentDashboard = () => {
-  const [userName, setUserName] = useState("Anirudh");
+  const [userName, setUserName] = useState("Student");
   const [showNotifications, setShowNotifications] = useState(false);
 
-  useEffect(() => {
-    AuthService.getMe()
-      .then((data) => setUserName(data.name ? data.name.split(" ")[0] : "Anirudh"))
-      .catch((err) => console.error(err));
-  }, []);
+  const [assessmentsCompleted, setAssessmentsCompleted] = useState(0);
+  const [wellbeingStatus, setWellbeingStatus] = useState(null); // GWBS interpretation
+  const [personalityType, setPersonalityType] = useState(null); // TABBPS classification
+  const [nextEvent, setNextEvent] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  // TODO(backend): no endpoint yet for historical wellbeing trend data.
+  // This stays fully mocked until a route like GET /student/wellbeing-history exists.
   const notifications = [
     { id: 1, text: "Your GWBS results are ready to view.", time: "2 hours ago" },
     { id: 2, text: "Upcoming: Yoga Workshop tomorrow at 10 AM.", time: "5 hours ago" },
     { id: 3, text: "You earned a new badge: Consistency!", time: "1 day ago" }
   ];
+
+  useEffect(() => {
+    AuthService.getMe()
+      .then((data) => setUserName(data.name ? data.name.split(" ")[0] : "Student"))
+      .catch((err) => console.error(err));
+
+    const loadDashboardData = async () => {
+      try {
+        const [dashboard, results, rsvps] = await Promise.all([
+          StudentService.getStudentDashboard(),
+          StudentService.getMyResults(),
+          StudentService.getMyRsvps(),
+        ]);
+
+        // Assessments completed
+        setAssessmentsCompleted(dashboard?.summary?.total_quizzes ?? 0);
+
+        // Latest GWBS + TABBPS results
+        // NOTE: assumes QuizAttemptOut includes `quiz_type` (joined from QuizTemplate).
+        // If it doesn't, this needs a backend schema change — flag if results look empty.
+        const sortedResults = [...(results || [])].sort(
+          (a, b) => new Date(b.attempted_at) - new Date(a.attempted_at)
+        );
+
+        const latestGwbs = sortedResults.find((r) => r.quiz_type === "GWBS");
+        if (latestGwbs) {
+          setWellbeingStatus(
+            latestGwbs.overall_remark || latestGwbs.result_json?.interpretation || null
+          );
+        }
+
+        const latestTabbps = sortedResults.find((r) => r.quiz_type === "TABBPS");
+        if (latestTabbps) {
+          setPersonalityType(latestTabbps.result_json?.final_classification || null);
+        }
+
+        // Next upcoming event (from RSVP'd events, scheduled, soonest first)
+        const upcoming = (rsvps || [])
+          .filter((e) => e.status === "scheduled")
+          .sort((a, b) => new Date(a.event_date) - new Date(b.event_date));
+
+        if (upcoming.length > 0) {
+          setNextEvent(upcoming[0]);
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, []);
 
   return (
     <div className="w-full h-full flex flex-col font-sans">
@@ -46,6 +104,7 @@ const StudentDashboard = () => {
                 <h3 className="font-semibold text-[#1E3A2F] font-serif">Notifications</h3>
                 <span className="text-xs text-[#386641] font-medium cursor-pointer hover:underline">Mark all as read</span>
               </div>
+              {/* TODO(backend): mocked — no notifications endpoint exists yet */}
               <div className="max-h-80 overflow-y-auto">
                 {notifications.map(n => (
                   <div key={n.id} className="p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">
@@ -67,7 +126,9 @@ const StudentDashboard = () => {
           </div>
           <div>
             <div className="text-xs font-semibold text-gray-500 tracking-wide font-serif mb-1">Wellbeing Status</div>
-            <div className="text-2xl font-semibold text-[#386641] font-sans">Above Average</div>
+            <div className="text-2xl font-semibold text-[#386641] font-sans">
+              {loading ? "…" : wellbeingStatus || "No data yet"}
+            </div>
             <div className="text-xs text-[#386641] font-medium mt-1">Based on latest GWBS</div>
           </div>
         </div>
@@ -79,7 +140,9 @@ const StudentDashboard = () => {
           </div>
           <div>
             <div className="text-xs font-semibold text-gray-500 tracking-wide font-serif mb-1">Personality Type</div>
-            <div className="text-2xl font-semibold text-[#386641] font-sans">Type B</div>
+            <div className="text-2xl font-semibold text-[#386641] font-sans">
+              {loading ? "…" : personalityType || "No data yet"}
+            </div>
             <div className="text-xs text-[#8A7B52] font-medium mt-1">Latest TABBPS</div>
           </div>
         </div>
@@ -91,7 +154,9 @@ const StudentDashboard = () => {
           </div>
           <div>
             <div className="text-xs font-semibold text-gray-500 tracking-wide font-serif mb-1">Assessments Completed</div>
-            <div className="text-2xl font-semibold text-[#386641] font-sans">4 / 4</div>
+            <div className="text-2xl font-semibold text-[#386641] font-sans">
+              {loading ? "…" : `${assessmentsCompleted} / ${TOTAL_ASSESSMENT_TYPES}`}
+            </div>
             <div className="text-xs text-[#F5A623] font-medium mt-1">This semester</div>
           </div>
         </div>
@@ -103,8 +168,12 @@ const StudentDashboard = () => {
           </div>
           <div>
             <div className="text-xs font-semibold text-gray-500 tracking-wide font-serif mb-1">Next Event</div>
-            <div className="text-2xl font-semibold text-[#386641] font-sans truncate max-w-[120px]">Yoga Workshop</div>
-            <div className="text-xs text-gray-500 font-medium mt-1">Tomorrow • 10:00 AM</div>
+            <div className="text-2xl font-semibold text-[#386641] font-sans truncate max-w-[120px]">
+              {loading ? "…" : nextEvent?.title || "None scheduled"}
+            </div>
+            <div className="text-xs text-gray-500 font-medium mt-1">
+              {nextEvent ? `${nextEvent.event_date} • ${nextEvent.event_time}` : ""}
+            </div>
           </div>
         </div>
       </div>
@@ -114,6 +183,7 @@ const StudentDashboard = () => {
         <div className="flex-[2] bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col">
           <div className="flex justify-between items-start mb-6">
             <h3 className="text-xl font-semibold text-[#386641] font-serif">Wellbeing Overview</h3>
+            {/* TODO(backend): mocked — no historical wellbeing trend endpoint exists yet */}
             <div className="flex flex-col items-end">
               <span className="text-xs font-semibold text-gray-500 mb-1">Average Wellbeing Score</span>
               <div className="flex items-center gap-2">
@@ -127,7 +197,7 @@ const StudentDashboard = () => {
           </div>
 
           <div className="flex-1 relative bg-[#FDFBF7] rounded-xl overflow-hidden mt-2 p-4 border border-gray-50">
-            {/* Simple SVG Line Chart Placeholder */}
+            {/* Placeholder SVG chart — replace once trend endpoint exists */}
             <svg viewBox="0 0 400 150" className="w-full h-full preserve-3d" preserveAspectRatio="none">
               <path d="M 0 100 L 40 70 L 80 80 L 120 110 L 160 80 L 200 95 L 240 70 L 280 75 L 320 50 L 360 65 L 400 40" fill="none" stroke="#A7C957" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
               <circle cx="0" cy="100" r="4" fill="white" stroke="#3A8458" strokeWidth="2" />
@@ -160,7 +230,7 @@ const StudentDashboard = () => {
 
         {/* Right Column: Today's Reflection & Recent Activity */}
         <div className="flex-1 flex flex-col gap-6">
-          {/* Today's Reflection */}
+          {/* Today's Reflection — static content, no backend needed */}
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col relative overflow-hidden h-[50%]">
             <h3 className="text-xl font-semibold text-[#386641] font-serif mb-6 relative z-10">Today's Reflection</h3>
 
@@ -171,7 +241,6 @@ const StudentDashboard = () => {
               <div className="text-4xl">🌱</div>
             </div>
 
-            {/* Decorative sticker placeholder */}
             <div className="absolute bottom-4 right-4 w-20 h-20 opacity-80 pointer-events-none -rotate-12 z-20">
               <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M50 10 C70 10, 90 30, 90 50 C90 70, 70 90, 50 90 C30 90, 10 70, 10 50 C10 30, 30 10, 50 10 Z" fill="#A7C957" />
@@ -183,6 +252,7 @@ const StudentDashboard = () => {
           {/* Recent Activity */}
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col relative overflow-hidden flex-1">
             <h3 className="text-xl font-semibold text-[#386641] font-serif mb-4">Recent Activity</h3>
+            {/* TODO(backend): mocked — no notifications/activity endpoint exists yet */}
             <div className="flex flex-col gap-4 overflow-y-auto pr-2">
               {notifications.map(n => (
                 <div key={n.id} className="flex gap-3 items-start border-b border-gray-50 pb-3 last:border-0 last:pb-0">
