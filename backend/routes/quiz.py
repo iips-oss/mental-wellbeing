@@ -70,14 +70,14 @@ def get_quiz(
                 "question_text": question.question_text,
                 "area_code": question.area_code,
                 "form": question.form,
-                "option_set_id": str(question.option_set_id),  # missing!
+                "option_set_id": str(question.option_set_id),
                 "quiz_template_id": str(quiz.id),    
                 "options": [
                     {
                         "id": str(opt.id),
                         "option_set_id": str(opt.option_set_id), 
                         "option_text": opt.option_text,
-                
+                        "score_value": opt.score_value,
                         "display_order": opt.display_order
                     }
                     for opt in options

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, X, Calendar, MapPin, Check } from "lucide-react";
+import { Plus, X, Calendar, MapPin, Check, CheckCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AuthService from "../../services/auth";
 
@@ -209,6 +209,30 @@ const ManageEvents = () => {
   const generateNewOtp = () => {
     const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
     setOtp(newOtp);
+  };
+
+  const handleMarkCompleted = async () => {
+    if (!selectedEventId) return;
+    try {
+      setSubmitting(true);
+      await AuthService.markEventCompleted(selectedEventId);
+      setEvents(prev => prev.map(ev => {
+        if (ev.id === selectedEventId) {
+          return {
+            ...ev,
+            status: "completed"
+          };
+        }
+        return ev;
+      }));
+      setShowManageModal(false);
+      resetForm();
+    } catch (err) {
+      console.error("Failed to mark event as completed:", err);
+      setFormError("Failed to mark event as completed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -603,12 +627,22 @@ const ManageEvents = () => {
 
               <div className="flex justify-between items-center pt-6 border-t border-black/10">
                 {showManageModal ? (
-                  <button
-                    type="button"
-                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
-                  >
-                    <X className="w-4 h-4" /> Cancel event
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleMarkCompleted}
+                      disabled={submitting}
+                      className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors cursor-pointer flex items-center gap-2 shadow-sm"
+                    >
+                      <CheckCircle className="w-4 h-4" /> Mark as Completed
+                    </button>
+                    <button
+                      type="button"
+                      className="text-red-500 font-semibold text-sm hover:bg-red-50 px-3 py-2.5 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <X className="w-4 h-4" /> Cancel event
+                    </button>
+                  </div>
                 ) : (
                   <div></div>
                 )}

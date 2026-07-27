@@ -108,9 +108,26 @@ const MobileQuizAttempt = () => {
     try {
       setSubmitting(true);
 
+      let submitAnswers = answers;
+      if (quiz.quiz_type === "TABBPS") {
+        const formA = {};
+        const formB = {};
+        questions.forEach((q) => {
+          const qId = q.id || q.question_id;
+          if (answers[qId]) {
+            if (q.form === "B") {
+              formB[qId] = answers[qId];
+            } else {
+              formA[qId] = answers[qId];
+            }
+          }
+        });
+        submitAnswers = { A: formA, B: formB };
+      }
+
       const response = await API.post("/quiz/submit", {
         quiz_template_id: quiz.quiz_template_id,
-        answers,
+        answers: submitAnswers,
       });
 
       navigate(

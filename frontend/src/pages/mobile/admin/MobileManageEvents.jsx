@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, X, Calendar, MapPin, Check } from "lucide-react";
+import { Plus, X, Calendar, MapPin, Check, CheckCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AuthService from "../../../services/auth";
 
@@ -234,6 +234,30 @@ const MobileManageEvents = () => {
   const generateNewOtp = () => {
     const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
     setOtp(newOtp);
+  };
+
+  const handleMarkCompleted = async () => {
+    if (!selectedEventId) return;
+    try {
+      setSubmitting(true);
+      await AuthService.markEventCompleted(selectedEventId);
+      setEvents(prev => prev.map(ev => {
+        if (ev.id === selectedEventId) {
+          return {
+            ...ev,
+            status: "completed"
+          };
+        }
+        return ev;
+      }));
+      setShowManageModal(false);
+      resetForm();
+    } catch (err) {
+      console.error("Failed to mark event as completed:", err);
+      setFormError("Failed to mark event as completed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -602,33 +626,46 @@ const MobileManageEvents = () => {
                 </div>
               )}
 
-              <div className="flex justify-between items-center pt-6 border-t border-black/10">
-                {showManageModal ? (
+              <div className="flex flex-col gap-3 pt-6 border-t border-black/10">
+                {showManageModal && (
                   <button
                     type="button"
-                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
+                    onClick={handleMarkCompleted}
+                    disabled={submitting}
+                    className="w-full bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-sm"
                   >
-                    <X className="w-4 h-4" /> Cancel event
+                    <CheckCircle className="w-4 h-4" /> Mark Event as Completed
                   </button>
-                ) : (
-                  <div></div>
                 )}
                 
-                <div className="flex flex-col w-full gap-3 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => { setShowAddModal(false); setShowManageModal(false); }}
-                    className="border border-[#2F3C36]/20 bg-white text-black px-6 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors cursor-pointer text-sm"
-                  >
-                    Discard changes
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="bg-[#2E7D4F] hover:bg-[#256641] text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm"
-                  >
-                    {submitting ? "Saving..." : "Save changes"}
-                  </button>
+                <div className="flex justify-between items-center w-full">
+                  {showManageModal ? (
+                    <button
+                      type="button"
+                      className="text-red-500 font-semibold text-sm hover:bg-red-50 px-3 py-2 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <X className="w-4 h-4" /> Cancel event
+                    </button>
+                  ) : (
+                    <div></div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setShowAddModal(false); setShowManageModal(false); }}
+                      className="border border-[#2F3C36]/20 bg-white text-black px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition-colors cursor-pointer text-sm"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="bg-[#2E7D4F] hover:bg-[#256641] text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm"
+                    >
+                      {submitting ? "Saving..." : "Save changes"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </form>

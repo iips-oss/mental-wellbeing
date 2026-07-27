@@ -9,7 +9,7 @@ from services.auth import require_role
 from schemas.event import EventOut, EventCreate, EventUpdate, EventCancelSchema
 # from models.admin import Admin  # needed for admin dashboard route
 from schemas.quiz import QuizTemplateOut,QuizTemplateCreate
-import os
+from services.quiz_service import populate_quiz_questions
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -206,6 +206,8 @@ def create_event(
             title=f"{quiz_type} Assessment"
         )
         db.add(new_quiz)
+        db.flush()
+        populate_quiz_questions(db, new_quiz)
 
     db.commit()
 
@@ -237,11 +239,31 @@ def update_event(
        event.event_time = data.event_time
     if data.description is not None:
        event.description = data.description
+    if data.status is not None:
+       event.status = data.status
 
     db.commit()
     db.refresh(event)
 
     return event
+
+
+@router.patch("/events/{event_id}/complete")
+def complete_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_role("admin"))
+):
+    event = db.query(Event).filter(Event.id == event_id).first()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    event.status = "completed"
+    db.commit()
+    db.refresh(event)
+
+    return {"message": "Event marked as completed successfully"}
 
 
 @router.patch("/events/{event_id}/cancel")
