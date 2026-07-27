@@ -55,16 +55,6 @@ const AuthService = {
     return response.data;
   },
 
-  updateEvent: async (eventId, eventData) => {
-    const response = await API.patch(`/admin/events/${eventId}`, eventData);
-    return response.data;
-  },
-
-  markEventCompleted: async (eventId) => {
-    const response = await API.patch(`/admin/events/${eventId}/complete`);
-    return response.data;
-  },
-
   // Returns every QuizTemplate across all events in one call, already joined
   // with its event's title/date/time/status. Avoids the N+1 pattern of
   // calling getEventQuizzes once per event.

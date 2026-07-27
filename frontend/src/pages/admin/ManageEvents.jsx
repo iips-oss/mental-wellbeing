@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, X, Calendar, MapPin, Check, CheckCircle } from "lucide-react";
+import { Plus, X, Calendar, MapPin, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AuthService from "../../services/auth";
 
@@ -211,30 +211,6 @@ const ManageEvents = () => {
     setOtp(newOtp);
   };
 
-  const handleMarkCompleted = async () => {
-    if (!selectedEventId) return;
-    try {
-      setSubmitting(true);
-      await AuthService.markEventCompleted(selectedEventId);
-      setEvents(prev => prev.map(ev => {
-        if (ev.id === selectedEventId) {
-          return {
-            ...ev,
-            status: "completed"
-          };
-        }
-        return ev;
-      }));
-      setShowManageModal(false);
-      resetForm();
-    } catch (err) {
-      console.error("Failed to mark event as completed:", err);
-      setFormError("Failed to mark event as completed.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="p-8 flex flex-col justify-center items-center h-full gap-4">
@@ -245,7 +221,7 @@ const ManageEvents = () => {
   }
 
   const todayStr = new Date().toISOString().split("T")[0];
-  
+
   const pastEvents = events.filter((e) => {
     return e.status === "completed" || e.status === "closed" || e.status === "cancelled" || e.event_date < todayStr;
   });
@@ -288,8 +264,8 @@ const ManageEvents = () => {
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 text-sm font-semibold rounded-full transition-colors ${activeTab === tab
-                ? "bg-[#F3F2F2] border border-[#73D38F] text-[#386641]"
-                : "text-[#9DB1A3] hover:text-[#386641]"
+              ? "bg-[#F3F2F2] border border-[#73D38F] text-[#386641]"
+              : "text-[#9DB1A3] hover:text-[#386641]"
               }`}
           >
             {tab}
@@ -330,7 +306,7 @@ const ManageEvents = () => {
                       {event.venue}
                     </div>
                   </div>
-                  
+
                   <div className="col-span-2 text-center text-[#3E4F45] text-sm">
                     {event.quizzes_count}
                   </div>
@@ -356,14 +332,14 @@ const ManageEvents = () => {
 
                   <div className="col-span-2 flex justify-end">
                     {activeTab === "Past Events" ? (
-                      <button 
+                      <button
                         onClick={() => openPastEventDetails(event)}
                         className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
                       >
                         View Details
                       </button>
                     ) : (
-                      <button 
+                      <button
                         onClick={() => openManageModal(event)}
                         className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
                       >
@@ -406,10 +382,10 @@ const ManageEvents = () => {
             )}
 
             <form onSubmit={showManageModal ? handleUpdateEvent : handleAddEvent} className="space-y-6">
-              
+
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase">Basic Information</h4>
-                
+
                 <div>
                   <label className="block text-sm font-semibold text-black mb-1.5 font-sans">Event title <span className="text-red-500">*</span></label>
                   <input
@@ -489,11 +465,10 @@ const ManageEvents = () => {
                 <div className="grid grid-cols-2 gap-3">
                   {/* SCQ */}
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${
-                      selectedQuizzes["SCQ"]
+                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${selectedQuizzes["SCQ"]
                         ? "bg-[#E5E5E5] border-[#2F3C36]"
                         : "bg-white hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -501,11 +476,10 @@ const ManageEvents = () => {
                       onChange={() => handleCheckboxChange("SCQ")}
                       className="hidden"
                     />
-                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${
-                      selectedQuizzes["SCQ"]
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${selectedQuizzes["SCQ"]
                         ? "bg-[#2E7D4F] border-[#2E7D4F] text-white"
                         : "border-gray-300 bg-white"
-                    }`}>
+                      }`}>
                       {selectedQuizzes["SCQ"] && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
@@ -513,14 +487,13 @@ const ManageEvents = () => {
                       <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">Self Concept Questionnaire — 48 questions, 6 dimensions</div>
                     </div>
                   </label>
-                  
+
                   {/* GWBS */}
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${
-                      selectedQuizzes["GWBS"]
+                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${selectedQuizzes["GWBS"]
                         ? "bg-[#E5E5E5] border-[#2F3C36]"
                         : "bg-white hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -528,11 +501,10 @@ const ManageEvents = () => {
                       onChange={() => handleCheckboxChange("GWBS")}
                       className="hidden"
                     />
-                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${
-                      selectedQuizzes["GWBS"]
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${selectedQuizzes["GWBS"]
                         ? "bg-[#2E7D4F] border-[#2E7D4F] text-white"
                         : "border-gray-300 bg-white"
-                    }`}>
+                      }`}>
                       {selectedQuizzes["GWBS"] && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
@@ -543,11 +515,10 @@ const ManageEvents = () => {
 
                   {/* TABBPS */}
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${
-                      selectedQuizzes["TABBPS"]
+                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${selectedQuizzes["TABBPS"]
                         ? "bg-[#E5E5E5] border-[#2F3C36]"
                         : "bg-white hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -555,11 +526,10 @@ const ManageEvents = () => {
                       onChange={() => handleCheckboxChange("TABBPS")}
                       className="hidden"
                     />
-                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${
-                      selectedQuizzes["TABBPS"]
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${selectedQuizzes["TABBPS"]
                         ? "bg-[#2E7D4F] border-[#2E7D4F] text-white"
                         : "border-gray-300 bg-white"
-                    }`}>
+                      }`}>
                       {selectedQuizzes["TABBPS"] && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
@@ -570,11 +540,10 @@ const ManageEvents = () => {
 
                   {/* EI */}
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${
-                      selectedQuizzes["EI"]
+                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${selectedQuizzes["EI"]
                         ? "bg-[#E5E5E5] border-[#2F3C36]"
                         : "bg-white hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -582,11 +551,10 @@ const ManageEvents = () => {
                       onChange={() => handleCheckboxChange("EI")}
                       className="hidden"
                     />
-                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${
-                      selectedQuizzes["EI"]
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${selectedQuizzes["EI"]
                         ? "bg-[#2E7D4F] border-[#2E7D4F] text-white"
                         : "border-gray-300 bg-white"
-                    }`}>
+                      }`}>
                       {selectedQuizzes["EI"] && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
@@ -612,8 +580,8 @@ const ManageEvents = () => {
                         readOnly
                         className="w-32 border border-[#2F3C36]/20 rounded-xl px-4 py-3 bg-white text-center font-bold tracking-[0.5em] text-lg text-black font-sans focus:outline-none"
                       />
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={generateNewOtp}
                         className="border border-[#2F3C36]/20 bg-white px-4 py-3 rounded-xl text-sm font-semibold text-black hover:bg-gray-50 transition-colors cursor-pointer"
                       >
@@ -627,26 +595,16 @@ const ManageEvents = () => {
 
               <div className="flex justify-between items-center pt-6 border-t border-black/10">
                 {showManageModal ? (
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handleMarkCompleted}
-                      disabled={submitting}
-                      className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors cursor-pointer flex items-center gap-2 shadow-sm"
-                    >
-                      <CheckCircle className="w-4 h-4" /> Mark as Completed
-                    </button>
-                    <button
-                      type="button"
-                      className="text-red-500 font-semibold text-sm hover:bg-red-50 px-3 py-2.5 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <X className="w-4 h-4" /> Cancel event
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
+                  >
+                    <X className="w-4 h-4" /> Cancel event
+                  </button>
                 ) : (
                   <div></div>
                 )}
-                
+
                 <div className="flex gap-3">
                   <button
                     type="button"
@@ -695,17 +653,17 @@ const ManageEvents = () => {
                   <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Event</h4>
                   <div className="text-[#3A8458] font-bold text-lg">{selectedPastEvent.title}</div>
                   <div className="text-[#3E4F45] text-sm mt-1 flex items-center gap-1">
-                     <MapPin className="w-3.5 h-3.5 shrink-0" /> {selectedPastEvent.venue}
+                    <MapPin className="w-3.5 h-3.5 shrink-0" /> {selectedPastEvent.venue}
                   </div>
                 </div>
-                
+
                 <div>
                   <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Date & Time</h4>
                   <div className="text-[#3E4F45] font-medium text-sm">
                     {new Date(selectedPastEvent.event_date).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric"
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric"
                     })} • {formatTime(selectedPastEvent.event_time)}
                   </div>
                 </div>
