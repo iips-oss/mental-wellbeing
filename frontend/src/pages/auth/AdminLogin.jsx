@@ -32,13 +32,13 @@ const Login = () => {
     }));
   };
 
-  const validate = () => {
+  const validate = (email) => {
     let err = {};
 
-    if (!formData.email.trim()) {
+    if (!email) {
       err.email = "Email is required";
     } else if (
-      !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(formData.email)
+      !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)
     ) {
       err.email = "Enter a valid email";
     }
@@ -54,14 +54,15 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!validate()) return;
-
     setError("");
+
+    const email = formData.email.trim();
+    if (!validate(email)) return;
+
     setLoading(true);
 
     try {
-      const data = await AuthService.login(formData.email, formData.password);
+      const data = await AuthService.login(email, formData.password);
       if (data.role === "admin") {
         navigate("/admin/dashboard", { replace: true });
       } else {
