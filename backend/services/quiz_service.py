@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.orm import Session
-from models.quiz import OptionSet, QuizOption, QuizQuestion, QuizTemplate
+from models.quiz import OptionSet, QuizOption, QuizQuestion
 from data.quiz_content import (
     SCQ_QUESTIONS, SCQ_OPTIONS,
     GWBS_QUESTIONS, GWBS_OPTIONS,
@@ -84,11 +84,14 @@ def get_or_create_scq_option_set(db: Session, q_no: int) -> OptionSet:
     options_tuples = [(opt_text, scores[idx], idx + 1) for idx, opt_text in enumerate(options_list)]
     return get_or_create_option_set(db, f"scq_options_q{q_no}", f"SCQ question {q_no} unique 5-point scale", options_tuples)
 
-def populate_quiz_questions(db: Session, template: QuizTemplate):
+def populate_quiz_questions(db: Session, quiz_type: str):
     """
-    Populates real questions and option sets for a given QuizTemplate based on its quiz_type.
+    Populates the shared question bank + option sets for a given quiz_type.
+    This should be called exactly ONCE per quiz_type (SCQ, GWBS, TABBPS, EI) —
+    NOT once per event/QuizTemplate. Questions are shared across every event
+    that uses this quiz_type.
     """
-    quiz_type = template.quiz_type.upper()
+    quiz_type = quiz_type.upper()
 
     if quiz_type == "SCQ":
         for i in range(1, len(SCQ_QUESTIONS) + 1):
@@ -96,7 +99,7 @@ def populate_quiz_questions(db: Session, template: QuizTemplate):
             opt_set = get_or_create_scq_option_set(db, i)
             q = QuizQuestion(
                 id=str(uuid.uuid4()),
-                quiz_template_id=template.id,
+                quiz_type=quiz_type,
                 option_set_id=opt_set.id,
                 question_no=i,
                 question_text=SCQ_QUESTIONS[i - 1],
@@ -111,7 +114,7 @@ def populate_quiz_questions(db: Session, template: QuizTemplate):
             area_code = get_gwbs_dim(i)
             q = QuizQuestion(
                 id=str(uuid.uuid4()),
-                quiz_template_id=template.id,
+                quiz_type=quiz_type,
                 option_set_id=opt_set.id,
                 question_no=i,
                 question_text=GWBS_QUESTIONS[i - 1],
@@ -126,7 +129,7 @@ def populate_quiz_questions(db: Session, template: QuizTemplate):
         for i in range(1, len(TABBPS_FORM_A_QUESTIONS) + 1):
             q = QuizQuestion(
                 id=str(uuid.uuid4()),
-                quiz_template_id=template.id,
+                quiz_type=quiz_type,
                 option_set_id=opt_set.id,
                 question_no=i,
                 question_text=TABBPS_FORM_A_QUESTIONS[i - 1],
@@ -138,7 +141,7 @@ def populate_quiz_questions(db: Session, template: QuizTemplate):
         for i in range(1, len(TABBPS_FORM_B_QUESTIONS) + 1):
             q = QuizQuestion(
                 id=str(uuid.uuid4()),
-                quiz_template_id=template.id,
+                quiz_type=quiz_type,
                 option_set_id=opt_set.id,
                 question_no=i,
                 question_text=TABBPS_FORM_B_QUESTIONS[i - 1],
@@ -153,7 +156,7 @@ def populate_quiz_questions(db: Session, template: QuizTemplate):
             area_code = get_ei_comp(i)
             q = QuizQuestion(
                 id=str(uuid.uuid4()),
-                quiz_template_id=template.id,
+                quiz_type=quiz_type,
                 option_set_id=opt_set.id,
                 question_no=i,
                 question_text=EI_QUESTIONS[i - 1],
