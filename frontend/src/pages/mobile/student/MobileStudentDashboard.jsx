@@ -15,17 +15,28 @@ const MobileStudentDashboard = () => {
   const [nextEvent, setNextEvent] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // TODO(backend): no endpoint yet for historical wellbeing trend data.
-  const notifications = [
-    { id: 1, text: "Your GWBS results are ready to view.", time: "2 hours ago" },
-    { id: 2, text: "Upcoming: Yoga Workshop tomorrow at 10 AM.", time: "5 hours ago" },
-    { id: 3, text: "You earned a new badge: Consistency!", time: "1 day ago" }
-  ];
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     AuthService.getMe()
       .then((data) => setUserName(data.name ? data.name.split(" ")[0] : "Student"))
       .catch((err) => console.error(err));
+
+    AuthService.getNotifications()
+      .then((data) => {
+        const mapped = (data || []).map((n) => ({
+          id: n.id,
+          text: n.message,
+          time: new Date(n.created_at).toLocaleString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+        }));
+        setNotifications(mapped);
+      })
+      .catch((err) => console.error("Failed to load notifications:", err));
 
     const loadDashboardData = async () => {
       try {
@@ -97,7 +108,6 @@ const MobileStudentDashboard = () => {
                 <h3 className="font-semibold text-[#1E3A2F] font-serif">Notifications</h3>
                 <span className="text-xs text-[#386641] font-medium cursor-pointer hover:underline">Mark all as read</span>
               </div>
-              {/* TODO(backend): mocked — no notifications endpoint exists yet */}
               <div className="max-h-80 overflow-y-auto">
                 {notifications.map(n => (
                   <div key={n.id} className="p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer">

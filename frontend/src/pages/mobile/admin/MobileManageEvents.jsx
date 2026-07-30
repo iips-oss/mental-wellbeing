@@ -31,72 +31,27 @@ const MobileManageEvents = () => {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
+  const [pastEventQuizzes, setPastEventQuizzes] = useState([]);
+  const [loadingPastEventQuizzes, setLoadingPastEventQuizzes] = useState(false);
+  const [pastEventQuizzesError, setPastEventQuizzesError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [completing, setCompleting] = useState(false);
+
   const tabs = ["Past Events", "Active Events"];
 
-  const fetchEvents = () => {
+  const fetchEvents = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const mockEvents = [
-        {
-          id: 1,
-          title: "Stress Management Workshop",
-          venue: "Seminar Hall A, Block 3",
-          event_date: "2026-07-25",
-          event_time: "14:00",
-          end_time: "16:00",
-          description: "A hands-on session exploring stress management techniques and psychological resilience strategies for college students.",
-          quizzes_count: "2/4",
-          attendees_count: 68,
-          status: "scheduled",
-          performance: "Average",
-          quizzes: { SCQ: true, GWBS: true, TABBPS: false, EI: false }
-        },
-        {
-          id: 2,
-          title: "Anxiety & Mental Health Talk",
-          venue: "Main Auditorium",
-          event_date: "2026-08-05",
-          event_time: "10:00",
-          end_time: "12:00",
-          description: "A talk about understanding anxiety.",
-          quizzes_count: "1/4",
-          attendees_count: 120,
-          status: "scheduled",
-          performance: "Pending",
-          quizzes: { SCQ: false, GWBS: false, TABBPS: false, EI: true }
-        },
-        {
-          id: 3,
-          title: "Stress Management Workshop",
-          venue: "Seminar Hall, IIPS DAVV",
-          event_date: "2026-06-12",
-          event_time: "14:00",
-          end_time: "16:00",
-          description: "Past workshop",
-          quizzes_count: "4/4",
-          attendees_count: 68,
-          status: "completed",
-          performance: "High",
-          quizzes: { SCQ: true, GWBS: true, TABBPS: true, EI: true }
-        },
-        {
-          id: 4,
-          title: "Type A/B Personality Seminar",
-          venue: "Room 101",
-          event_date: "2026-05-10",
-          event_time: "11:00",
-          end_time: "13:00",
-          description: "Seminar on personality types",
-          quizzes_count: "2/4",
-          attendees_count: 45,
-          status: "completed",
-          performance: "Average",
-          quizzes: { SCQ: false, GWBS: false, TABBPS: true, EI: false }
-        }
-      ];
-      setEvents(mockEvents);
+    setError("");
+    try {
+      const data = await AuthService.getAdminEvents();
+      setEvents(data || []);
+    } catch (err) {
+      console.error("Failed to load events:", err);
+      setError("Failed to load events. Please try again.");
+      setEvents([]);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   useEffect(() => {
@@ -127,7 +82,7 @@ const MobileManageEvents = () => {
     setShowAddModal(true);
   };
 
-  const openManageModal = (event) => {
+  const openManageModal = async (event) => {
     setSelectedEventId(event.id);
     setTitle(event.title);
     setVenue(event.venue || "");
@@ -136,14 +91,29 @@ const MobileManageEvents = () => {
     setEndTime(event.end_time || "");
     setDescription(event.description || "");
     setSelectedQuizzes(event.quizzes || { SCQ: false, GWBS: false, TABBPS: false, EI: false });
-    setOtp("4821"); // Mock OTP
+    setOtp(event.otp || "4821");
     setFormError("");
     setShowManageModal(true);
   };
 
+  const openPastEventDetails = async (event) => {
+    setSelectedPastEvent(event);
+    setPastEventQuizzes([]);
+    setPastEventQuizzesError("");
+    setLoadingPastEventQuizzes(true);
+    try {
+      const quizzes = await AuthService.getEventQuizzes(event.id);
+      setPastEventQuizzes(quizzes || []);
+    } catch (err) {
+      console.error("Failed to load quizzes for event:", err);
+      setPastEventQuizzesError("Failed to load quizzes for this event.");
+    } finally {
+      setLoadingPastEventQuizzes(false);
+    }
+  };
+
   const formatTime = (timeStr) => {
     if (!timeStr) return "";
-    // Parse time like "14:00" to "2:00 PM"
     const [h, m] = timeStr.split(":");
     const date = new Date();
     date.setHours(parseInt(h, 10));
@@ -151,42 +121,46 @@ const MobileManageEvents = () => {
     return date.toLocaleTimeString("en-US", { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
+  const toBackendTime = (timeStr) => {
+    if (!timeStr) return timeStr;
+    return timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+  };
+
   const handleAddEvent = async (e) => {
     e.preventDefault();
     setFormError("");
     setSubmitting(true);
 
-    const quizTypes = Object.keys(selectedQuizzes).filter((k) => selectedQuizzes[k]);
+    const quizOrder = ["SCQ", "GWBS", "TABBPS", "EI"];
+    const quizTypes = quizOrder.filter((k) => selectedQuizzes[k]);
     if (quizTypes.length === 0) {
       setFormError("Please select at least one quiz type to assign to this event.");
       setSubmitting(false);
       return;
     }
+    const sequences = quizTypes.map((_, idx) => idx + 1);
+
+    const payload = {
+      title,
+      venue,
+      event_date: eventDate,
+      event_time: toBackendTime(eventTime),
+      description,
+      quiz_types: quizTypes,
+      sequences
+    };
 
     try {
-      setTimeout(() => {
-        const newEvent = {
-          id: Date.now(),
-          title: title,
-          venue: venue,
-          event_date: eventDate,
-          event_time: eventTime,
-          end_time: endTime,
-          description: description,
-          quizzes_count: `${quizTypes.length}/4`,
-          attendees_count: 0,
-          status: "scheduled",
-          performance: "Pending",
-          quizzes: selectedQuizzes
-        };
-
-        setEvents(prev => [...prev, newEvent]);
-        setShowAddModal(false);
-        resetForm();
-        setSubmitting(false);
-      }, 500);
+      await AuthService.createEvent(payload);
+      setShowAddModal(false);
+      resetForm();
+      await fetchEvents();
     } catch (err) {
-      setFormError("Failed to create event.");
+      console.error("Failed to create event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to create event. Please try again."
+      );
+    } finally {
       setSubmitting(false);
     }
   };
@@ -203,37 +177,98 @@ const MobileManageEvents = () => {
       return;
     }
 
+    const payload = {
+      title,
+      venue,
+      event_date: eventDate,
+      event_time: toBackendTime(eventTime),
+      description,
+    };
+
     try {
-      setTimeout(() => {
-        setEvents(prev => prev.map(ev => {
-          if (ev.id === selectedEventId) {
-            return {
-              ...ev,
-              title,
-              venue,
-              event_date: eventDate,
-              event_time: eventTime,
-              end_time: endTime,
-              description,
-              quizzes_count: `${quizTypes.length}/4`,
-              quizzes: selectedQuizzes
-            };
-          }
-          return ev;
-        }));
-        setShowManageModal(false);
-        resetForm();
-        setSubmitting(false);
-      }, 500);
+      await AuthService.updateEvent(selectedEventId, payload);
+      setShowManageModal(false);
+      resetForm();
+      await fetchEvents();
     } catch (err) {
-      setFormError("Failed to update event.");
+      console.error("Failed to update event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to update event. Please try again."
+      );
+    } finally {
       setSubmitting(false);
     }
   };
 
-  const generateNewOtp = () => {
-    const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
-    setOtp(newOtp);
+  const handleCancelEvent = async () => {
+    const reason = window.prompt(
+      "Please provide a reason for cancelling this event:",
+      "Cancelled by admin"
+    );
+
+    if (reason === null) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this event? This cannot be undone, and students will no longer be able to submit quizzes for it."
+    );
+
+    if (!confirmed) return;
+
+    setCancelling(true);
+    setFormError("");
+
+    try {
+      await AuthService.cancelEvent(selectedEventId, reason);
+      setShowManageModal(false);
+      resetForm();
+      await fetchEvents();
+    } catch (err) {
+      console.error("Failed to cancel event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to cancel event. Please try again."
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handleCompleteEvent = async () => {
+    const confirmed = window.confirm(
+      "Mark this event as completed? It will move to Past Events and quiz results will become viewable."
+    );
+
+    if (!confirmed) return;
+
+    setCompleting(true);
+    setFormError("");
+
+    try {
+      await AuthService.completeEvent(selectedEventId);
+      setShowManageModal(false);
+      resetForm();
+      await fetchEvents();
+    } catch (err) {
+      console.error("Failed to complete event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to mark event as completed. Please try again."
+      );
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const generateNewOtp = async () => {
+    if (!selectedEventId) return;
+    try {
+      const data = await AuthService.generateEventOtp(selectedEventId);
+      if (data.otp) {
+        setOtp(data.otp);
+      }
+    } catch (err) {
+      console.error("Failed to generate OTP:", err);
+      const fallback = Math.floor(1000 + Math.random() * 9000).toString();
+      setOtp(fallback);
+    }
   };
 
   if (loading) {
@@ -334,7 +369,7 @@ const MobileManageEvents = () => {
                   <div className="flex justify-end mt-1 border-t border-[#2F3C36]/20 pt-3">
                     {activeTab === "Past Events" ? (
                       <button
-                        onClick={() => setSelectedPastEvent(event)}
+                        onClick={() => openPastEventDetails(event)}
                         className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg w-full text-center transition-colors cursor-pointer"
                       >
                         View Details
@@ -594,19 +629,30 @@ const MobileManageEvents = () => {
                 </div>
               )}
 
-              <div className="flex justify-between items-center pt-6 border-t border-black/10">
-                {showManageModal ? (
-                  <button
-                    type="button"
-                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
-                  >
-                    <X className="w-4 h-4" /> Cancel event
-                  </button>
-                ) : (
-                  <div></div>
+              <div className="flex flex-col gap-3 pt-6 border-t border-black/10">
+                {showManageModal && (
+                  <div className="flex justify-between items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCancelEvent}
+                      disabled={cancelling}
+                      className="text-red-500 font-semibold text-sm hover:bg-red-50 px-3 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <X className="w-4 h-4" /> {cancelling ? "Cancelling..." : "Cancel event"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCompleteEvent}
+                      disabled={completing}
+                      className="text-[#386641] font-semibold text-sm hover:bg-emerald-50 px-3 py-2 rounded-lg border border-transparent hover:border-emerald-100 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Check className="w-4 h-4" /> {completing ? "Completing..." : "Complete event"}
+                    </button>
+                  </div>
                 )}
 
-                <div className="flex flex-col w-full gap-3 mt-4">
+                <div className="flex flex-col w-full gap-3 mt-2">
                   <button
                     type="button"
                     onClick={() => { setShowAddModal(false); setShowManageModal(false); }}
@@ -677,30 +723,47 @@ const MobileManageEvents = () => {
 
               <div className="pt-4 border-t border-black/10">
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-3">Quizzes Taken</h4>
-                <div className="flex flex-col gap-4">
-                  {Object.entries(selectedPastEvent.quizzes).filter(([_, isSelected]) => isSelected).map(([quizName]) => {
-                    let quizId = 1;
-                    let fullName = quizName;
-                    if (quizName === 'SCQ') { quizId = 1; fullName = 'Self Concept Questionnaire (SCQ)'; }
-                    else if (quizName === 'GWBS') { quizId = 2; fullName = 'General Well-Being Scale (GWBS)'; }
-                    else if (quizName === 'TABBPS') { quizId = 3; fullName = 'Type A/B Behaviour Pattern (TABBPS)'; }
-                    else if (quizName === 'EI') { quizId = 4; fullName = 'Emotional Intelligence (EI)'; }
-
-                    return (
+                
+                {loadingPastEventQuizzes ? (
+                  <div className="py-6 text-center text-gray-500 font-medium">Loading event quizzes...</div>
+                ) : pastEventQuizzesError ? (
+                  <div className="py-4 text-center text-red-500 font-medium">{pastEventQuizzesError}</div>
+                ) : pastEventQuizzes.length > 0 ? (
+                  <div className="flex flex-col gap-4">
+                    {pastEventQuizzes.map((quiz) => (
                       <div
-                        key={quizName}
-                        onClick={() => navigate(`/admin/quizzes/${quizId}/results`)}
+                        key={quiz.id}
+                        onClick={() => navigate(`/admin/quizzes/${quiz.quiz_template_id || quiz.id}/results?eventId=${selectedPastEvent.id}&quizType=${quiz.quiz_type}`)}
                         className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] hover:shadow-md transition-all group"
                       >
-                        <div className="text-[#3A8458] font-bold font-sans text-lg group-hover:text-[#2E7D4F] transition-colors">{quizName}</div>
-                        <div className="text-xs text-[#9DB1A3] mt-1 font-medium">{fullName}</div>
+                        <div className="text-[#3A8458] font-bold font-sans text-lg group-hover:text-[#2E7D4F] transition-colors">{quiz.quiz_type}</div>
+                        <div className="text-xs text-[#9DB1A3] mt-1 font-medium">{quiz.title || quiz.quiz_type}</div>
                         <div className="mt-3 text-xs font-bold text-[#2E7D4F] uppercase tracking-wider flex items-center gap-1">
                           View Results &rarr;
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    {selectedPastEvent.quizzes && typeof selectedPastEvent.quizzes === "object" ? (
+                      Object.entries(selectedPastEvent.quizzes).filter(([_, isSelected]) => isSelected).map(([quizName]) => (
+                        <div
+                          key={quizName}
+                          onClick={() => navigate(`/admin/quizzes/1/results?eventId=${selectedPastEvent.id}&quizType=${quizName}`)}
+                          className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] hover:shadow-md transition-all group"
+                        >
+                          <div className="text-[#3A8458] font-bold font-sans text-lg group-hover:text-[#2E7D4F] transition-colors">{quizName}</div>
+                          <div className="mt-3 text-xs font-bold text-[#2E7D4F] uppercase tracking-wider flex items-center gap-1">
+                            View Results &rarr;
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-gray-500">No quiz information available for this event.</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
