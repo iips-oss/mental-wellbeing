@@ -11,6 +11,7 @@ from schemas.event import EventOut, EventCreate, EventUpdate, EventCancelSchema
 # from models.admin import Admin  # needed for admin dashboard route
 from schemas.quiz import QuizTemplateOut,QuizTemplateCreate
 from models.notification import Notification
+from models.admin import Admin
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 from models.event import Event, EventReport, EventRSVP
@@ -37,6 +38,10 @@ def get_admin_events(
             
         quizzes_count_str = f"{completed_templates}/{total_templates}"
         attendees_count = db.query(EventRSVP).filter(EventRSVP.event_id == event.id).count()
+        
+        # look up faculty name from the event's admin_id
+        creator = db.query(Admin).filter(Admin.id == event.admin_id).first()
+        faculty_name = creator.name if creator else "Unknown"
         
         # performance logic based on GWBS average
         event_gwbs_attempts = db.query(QuizAttempt.total_score).join(
@@ -69,7 +74,8 @@ def get_admin_events(
             "description": event.description,
             "quizzes_count": quizzes_count_str,
             "attendees_count": attendees_count,
-            "performance": perf_str
+            "performance": perf_str,
+            "faculty_name": faculty_name
         })
     return result
 
