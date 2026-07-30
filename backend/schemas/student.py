@@ -45,3 +45,17 @@ class DashboardSummary(BaseModel):
 class DashboardOut(BaseModel):
     student: StudentOut
     summary: DashboardSummary
+
+from datetime import date
+from typing import Optional
+
+class ScqHistoryItem(BaseModel):
+    event_id: str
+    event_name: str
+    event_date: date
+    score: int
+
+class ScqProgressOut(BaseModel):
+    current_score: Optional[int]
+    latest_event: Optional[date]
+    history: list[ScqHistoryItem]

@@ -5,10 +5,10 @@ from models.event import Event, EventRSVP
 from models.student import Student
 from models.quiz import QuizAttempt, QuizTemplate
 from schemas.event import EventOut, EventRSVPCreate
-from schemas.student import DashboardOut
+from schemas.student import DashboardOut, ScqProgressOut
 from services.auth import require_role
 from schemas.quiz import QuizAttemptOut
-
+from models.event import Event
 router = APIRouter(prefix="/student", tags=["student"])
 
 
@@ -292,4 +292,63 @@ def get_event_overall_results(
         "event_title": event.title,
         "event_date": event.event_date,
         "quizzes": quiz_results
+    }
+
+@router.get("/scq-progress", response_model=ScqProgressOut)
+def get_scq_progress(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("student"))
+):
+    """
+    Returns SCQ history for the logged-in student.
+
+    X-axis  -> Event title
+    Y-axis  -> SCQ total score
+    """
+
+    attempts = (
+        db.query(QuizAttempt, QuizTemplate, Event)
+        .join(
+            QuizTemplate,
+            QuizAttempt.quiz_template_id == QuizTemplate.id
+        )
+        .join(
+            Event,
+            QuizTemplate.event_id == Event.id
+        )
+        .filter(
+            QuizAttempt.student_id == current_user.id,
+            QuizAttempt.status == "submitted",
+            QuizTemplate.quiz_type == "SCQ"
+        )
+        .order_by(Event.event_date.asc())
+        .all()
+    )
+
+    history = []
+
+    for attempt, template, event in attempts:
+        history.append({
+            "event_id": event.id,
+            "event_name": event.title,
+            "event_date": event.event_date,
+            "score": attempt.total_score
+        })
+
+    current_score = (
+        history[-1]["score"]
+        if history
+        else None
+    )
+
+    latest_event = (
+        history[-1]["event_date"]
+        if history
+        else None
+    )
+
+    return {
+        "current_score": current_score,
+        "latest_event": latest_event,
+        "history": history
     }

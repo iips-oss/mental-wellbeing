@@ -39,7 +39,10 @@ const StudentService = {
     const response = await API.get(`/student/events/${eventId}/overall`);
     return response.data;
   },
-
+getScqProgress: async () => {
+  const response = await API.get("/student/scq-progress");
+  return response.data;
+},
   // Quiz taking
   getQuizQuestions: async (eventId) => {
     const response = await API.get(`/quiz/event/${eventId}`);
