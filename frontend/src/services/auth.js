@@ -81,6 +81,10 @@ updateEvent: async (eventId, eventData) => {
   const response = await API.patch(`/admin/events/${eventId}`, eventData);
   return response.data;
 },
+completeEvent: async (eventId) => {
+  const response = await API.patch(`/admin/events/${eventId}/complete`);
+  return response.data;
+},
   // EI has its own endpoint because results are competency-based
   getEIResults: async (eventId) => {
     const response = await API.get(`/admin/events/${eventId}/results/ei`);

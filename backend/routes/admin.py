@@ -682,3 +682,33 @@ def get_event_results(
         }
         for attempt, student, quiz_template in results
     ]
+@router.patch("/events/{event_id}/complete")
+def complete_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_role("admin"))
+):
+    event = db.query(Event).filter(Event.id == event_id).first()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if event.status == "cancelled":
+        raise HTTPException(status_code=400, detail="Cancelled events cannot be marked as completed")
+
+    if event.status == "completed":
+        raise HTTPException(status_code=400, detail="Event is already marked as completed")
+
+    event.status = "completed"
+
+    db.add(Notification(
+        title="Event completed",
+        message=f"{event.title} has been marked as completed.",
+        type="event_completed",
+        event_id=event.id
+    ))
+
+    db.commit()
+    db.refresh(event)
+
+    return {"message": "Event marked as completed"}

@@ -34,7 +34,7 @@ const ManageEvents = () => {
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [formError, setFormError] = useState("");
-
+  const [completing, setCompleting] = useState(false);
   const tabs = ["Past Events", "Active Events"];
 
   const fetchEvents = async () => {
@@ -234,7 +234,30 @@ const ManageEvents = () => {
       setCancelling(false);
     }
   };
+const handleCompleteEvent = async () => {
+  const confirmed = window.confirm(
+    "Mark this event as completed? It will move to Past Events and quiz results will become viewable."
+  );
 
+  if (!confirmed) return;
+
+  setCompleting(true);
+  setFormError("");
+
+  try {
+    await AuthService.completeEvent(selectedEventId);
+    setShowManageModal(false);
+    resetForm();
+    await fetchEvents();
+  } catch (err) {
+    console.error("Failed to complete event:", err);
+    setFormError(
+      err?.response?.data?.detail || "Failed to mark event as completed. Please try again."
+    );
+  } finally {
+    setCompleting(false);
+  }
+};
   const generateNewOtp = () => {
     const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
     setOtp(newOtp);
@@ -622,15 +645,25 @@ const ManageEvents = () => {
               )}
 
               <div className="flex justify-between items-center pt-6 border-t border-black/10">
-                {showManageModal ? (
-                  <button
-                    type="button"
-                    onClick={handleCancelEvent}
-                    disabled={cancelling}
-                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <X className="w-4 h-4" /> {cancelling ? "Cancelling..." : "Cancel event"}
-                  </button>
+              {showManageModal ? (
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCancelEvent}
+                      disabled={cancelling || completing}
+                      className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <X className="w-4 h-4" /> {cancelling ? "Cancelling..." : "Cancel event"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCompleteEvent}
+                      disabled={cancelling || completing}
+                      className="text-[#2E7D4F] font-semibold text-sm hover:bg-green-50 px-4 py-2 rounded-lg border border-transparent hover:border-green-100 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Check className="w-4 h-4" /> {completing ? "Completing..." : "Mark as completed"}
+                    </button>
+                  </div>
                 ) : (
                   <div></div>
                 )}
