@@ -9,7 +9,6 @@ from services.auth import require_role
 from schemas.event import EventOut, EventCreate, EventUpdate, EventCancelSchema
 # from models.admin import Admin  # needed for admin dashboard route
 from schemas.quiz import QuizTemplateOut,QuizTemplateCreate
-from services.quiz_service import populate_quiz_questions
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -207,7 +206,6 @@ def create_event(
         )
         db.add(new_quiz)
         db.flush()
-        populate_quiz_questions(db, new_quiz)
 
     db.commit()
 
