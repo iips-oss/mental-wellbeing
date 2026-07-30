@@ -67,7 +67,20 @@ const AuthService = {
     const response = await API.get(`/admin/events/${eventId}/results`);
     return response.data;
   },
-
+cancelEvent: async (eventId, reason) => {
+  const response = await API.patch(`/admin/events/${eventId}/cancel`, {
+    cancellation_reason: reason,
+  });
+  return response.data;
+},
+getNotifications: async () => {
+  const response = await API.get("/notifications/");
+  return response.data;
+},
+updateEvent: async (eventId, eventData) => {
+  const response = await API.patch(`/admin/events/${eventId}`, eventData);
+  return response.data;
+},
   // EI has its own endpoint because results are competency-based
   getEIResults: async (eventId) => {
     const response = await API.get(`/admin/events/${eventId}/results/ei`);

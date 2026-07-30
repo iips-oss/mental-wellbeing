@@ -32,6 +32,7 @@ const ManageEvents = () => {
   });
   const [otp, setOtp] = useState("4821");
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [formError, setFormError] = useState("");
 
   const tabs = ["Past Events", "Active Events"];
@@ -178,31 +179,59 @@ const ManageEvents = () => {
       return;
     }
 
+    const payload = {
+      title,
+      venue,
+      event_date: eventDate,
+      event_time: toBackendTime(eventTime),
+      description,
+    };
+
     try {
-      setTimeout(() => {
-        setEvents(prev => prev.map(ev => {
-          if (ev.id === selectedEventId) {
-            return {
-              ...ev,
-              title,
-              venue,
-              event_date: eventDate,
-              event_time: eventTime,
-              end_time: endTime,
-              description,
-              quizzes_count: `${quizTypes.length}/4`,
-              quizzes: selectedQuizzes
-            };
-          }
-          return ev;
-        }));
-        setShowManageModal(false);
-        resetForm();
-        setSubmitting(false);
-      }, 500);
+      await AuthService.updateEvent(selectedEventId, payload);
+      setShowManageModal(false);
+      resetForm();
+      await fetchEvents();
     } catch (err) {
-      setFormError("Failed to update event.");
+      console.error("Failed to update event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to update event. Please try again."
+      );
+    } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCancelEvent = async () => {
+    const reason = window.prompt(
+      "Please provide a reason for cancelling this event:",
+      "Cancelled by admin"
+    );
+
+    // user hit Cancel on the prompt itself
+    if (reason === null) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this event? This cannot be undone, and students will no longer be able to submit quizzes for it."
+    );
+
+    if (!confirmed) return;
+
+    setCancelling(true);
+    setFormError("");
+
+    try {
+      await AuthService.cancelEvent(selectedEventId, reason);
+      setShowManageModal(false);
+      resetForm();
+      await fetchEvents();
+    } catch (err) {
+      console.error("Failed to cancel event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to cancel event. Please try again."
+      );
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -282,7 +311,7 @@ const ManageEvents = () => {
           <div className="flex flex-col h-full">
             <div className="grid grid-cols-12 gap-4 px-6 pb-4 border-b border-black/10 font-serif font-semibold text-black">
               <div className="col-span-4">Event</div>
-              <div className="col-span-2 text-center">Quizzes</div>
+              <div className="col-span-2 text-center">Faculty</div>
               <div className="col-span-2 text-center">Date</div>
               <div className="col-span-2 text-center">
                 {activeTab === "Past Events" ? "Attendees" : "Registrations"}
@@ -308,9 +337,8 @@ const ManageEvents = () => {
                   </div>
 
                   <div className="col-span-2 text-center text-[#3E4F45] text-sm">
-                    {event.quizzes_count}
+                   {event.faculty_name}
                   </div>
-
                   <div className="col-span-2 text-center">
                     <div className="text-[#3E4F45] text-sm mb-0.5">
                       {new Date(event.event_date).toLocaleDateString("en-GB", {
@@ -597,9 +625,11 @@ const ManageEvents = () => {
                 {showManageModal ? (
                   <button
                     type="button"
-                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
+                    onClick={handleCancelEvent}
+                    disabled={cancelling}
+                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <X className="w-4 h-4" /> Cancel event
+                    <X className="w-4 h-4" /> {cancelling ? "Cancelling..." : "Cancel event"}
                   </button>
                 ) : (
                   <div></div>

@@ -14,20 +14,28 @@ const StudentDashboard = () => {
   const [personalityType, setPersonalityType] = useState(null); // TABBPS classification
   const [nextEvent, setNextEvent] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // TODO(backend): no endpoint yet for historical wellbeing trend data.
-  // This stays fully mocked until a route like GET /student/wellbeing-history exists.
-  const notifications = [
-    { id: 1, text: "Your GWBS results are ready to view.", time: "2 hours ago" },
-    { id: 2, text: "Upcoming: Yoga Workshop tomorrow at 10 AM.", time: "5 hours ago" },
-    { id: 3, text: "You earned a new badge: Consistency!", time: "1 day ago" }
-  ];
+  const [notifications, setNotifications] = useState([]);
+  
 
   useEffect(() => {
     AuthService.getMe()
       .then((data) => setUserName(data.name ? data.name.split(" ")[0] : "Student"))
       .catch((err) => console.error(err));
-
+    AuthService.getNotifications()
+  .then((data) => {
+    const mapped = (data || []).map((n) => ({
+      id: n.id,
+      text: n.message,
+      time: new Date(n.created_at).toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    }));
+    setNotifications(mapped);
+  })
+  .catch((err) => console.error("Failed to load notifications:", err));
     const loadDashboardData = async () => {
       try {
         const [dashboard, results, rsvps] = await Promise.all([
