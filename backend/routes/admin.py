@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
+import os
 from datetime import datetime
 from database import get_db
 from models.event import Event, EventReport
@@ -9,7 +10,7 @@ from services.auth import require_role
 from schemas.event import EventOut, EventCreate, EventUpdate, EventCancelSchema
 # from models.admin import Admin  # needed for admin dashboard route
 from schemas.quiz import QuizTemplateOut,QuizTemplateCreate
-
+from models.notification import Notification
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 from models.event import Event, EventReport, EventRSVP
@@ -206,7 +207,12 @@ def create_event(
         )
         db.add(new_quiz)
         db.flush()
-
+    db.add(Notification(
+        title="New event scheduled",
+        message=f"{new_event.title} has been scheduled for {new_event.event_date.isoformat()}.",
+        type="event_created",
+        event_id=new_event.id
+    ))
     db.commit()
 
     return {"message": "Event created successfully", "event_id": str(new_event.id)}
@@ -262,7 +268,12 @@ def cancel_event(
     event.status = "cancelled"
     event.cancelled_at = datetime.now()
     event.cancellation_reason = data.cancellation_reason
-
+    db.add(Notification(
+        title="Event cancelled",
+        message=f"{event.title} has been cancelled.",
+        type="event_cancelled",
+        event_id=event.id
+    ))
     db.commit()
     db.refresh(event)
 
@@ -301,6 +312,12 @@ async def upload_report(
         uploaded_at=datetime.now()
     )
     db.add(new_report)
+    db.add(Notification(
+        title="Results published",
+        message=f"A report has been uploaded for {event.title}.",
+        type="results_published",
+        event_id=event_id
+    ))
     db.commit()
 
     return {"message": "Report uploaded successfully"}
@@ -380,6 +397,12 @@ def add_quiz_to_event(
         title=data.title
     )
     db.add(new_quiz)
+    db.add(Notification(
+        title="New quiz assigned",
+        message=f"{data.quiz_type} has been added to {event.title}.",
+        type="quiz_assigned",
+        event_id=event_id
+    ))
     db.commit()
     db.refresh(new_quiz)
 
