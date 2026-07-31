@@ -52,6 +52,7 @@ def register_student(payload: StudentCreate, db: Session = Depends(get_db)):
 
     student = Student(
         enrollment_no=payload.enrollment_no,
+        roll_number=payload.roll_number,
         name=payload.name,
         email=payload.email,
         phone=payload.phone,
@@ -61,6 +62,8 @@ def register_student(payload: StudentCreate, db: Session = Depends(get_db)):
         gender=payload.gender,
         password_hash=hash_password(payload.password),
     )
+    if db.query(Student).filter(Student.roll_number == payload.roll_number).first():
+        raise HTTPException(400, "Roll number already registered")
     db.add(student)
     db.commit()
     db.refresh(student)

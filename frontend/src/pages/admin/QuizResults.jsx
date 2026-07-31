@@ -324,7 +324,7 @@ const QuizResults = () => {
               </div>
 
               <div className="text-center">
-                Enrollment No.
+                Roll No.
               </div>
 
               {hasScoreABColumns ? (
@@ -396,9 +396,18 @@ const QuizResults = () => {
                         {r.student_name}
                       </div>
 
-                      {/* ENROLLMENT */}
-                      <div className="text-center text-black font-sans text-base">
-                        {r.enrollment_no}
+                      {/* ROLL / ENROLLMENT NUMBER */}
+                      <div className="text-center font-sans text-base">
+                        {r.is_provisional_id ? (
+                          <span
+                            className="text-gray-500 italic"
+                            title="Roll number not assigned yet — showing enrollment number"
+                          >
+                            {r.enrollment_no}
+                          </span>
+                        ) : (
+                          <span className="text-black">{r.enrollment_no}</span>
+                        )}
                       </div>
 
                       {/* SCORES */}

@@ -14,6 +14,7 @@ const Register = () => {
 
   const [formData, setFormData] = useState({
     enrollment_no: "",
+    roll_number: "",
     name: "",
     email: "",
     phone: "",
@@ -39,8 +40,14 @@ const Register = () => {
 
   const validate = () => {
     let err = {};
-
+    const ROLL_NUMBER_PATTERN = /^[A-Z]{2}-2K\d{2}-\d{1,3}$/;
     if (!formData.name.trim()) err.name = "Enter your name";
+    
+    if (!formData.roll_number.trim()) {
+      err.roll_number = "Enter roll number";
+    } else if (!ROLL_NUMBER_PATTERN.test(formData.roll_number)) {
+      err.roll_number = "Invalid roll number format";
+    }
 
     if (!formData.enrollment_no.trim())
       err.enrollment_no = "Enter enrollment number";
@@ -83,6 +90,7 @@ const Register = () => {
 
       await API.post("/auth/register/student", {
         enrollment_no: formData.enrollment_no,
+        roll_number: formData.roll_number.trim().toUpperCase(),
         name: formData.name,
         email: formData.email,
         phone: formData.phone,
@@ -217,7 +225,33 @@ const Register = () => {
                 <p className="text-red-500 text-[10px] mt-0.5 font-medium">{errors.phone}</p>
               )}
             </div>
+            {/* Roll Number — NEW, full width row */}
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Roll Number
+              </label>
 
+              <input
+                type="text"
+                name="roll_number"
+                value={formData.roll_number}
+                onChange={handleChange}
+                onBlur={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    roll_number: prev.roll_number.trim().toUpperCase(),
+                  }))
+                }
+                placeholder="e.g. IT-2K23-53"
+                className="w-full px-3 py-1.5 rounded-lg text-xs border border-gray-300 bg-gray-50 focus:bg-white focus:border-[#2F6F5E] focus:ring-4 focus:ring-[#2F6F5E]/20 outline-none transition"
+              />
+
+              {errors.roll_number && (
+                <p className="text-red-500 text-[10px] mt-0.5 font-medium">
+                  {errors.roll_number}
+                </p>
+              )}
+            </div>
             {/* Email */}
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-gray-700 mb-1">

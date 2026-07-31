@@ -129,6 +129,22 @@ const MobileQuizResults = () => {
     }
   };
 
+  // Renders the student identifier — roll number if assigned, italic
+  // enrollment number fallback otherwise (backend sends both fields).
+  const renderStudentId = (r) => {
+    if (r.is_provisional_id) {
+      return (
+        <span
+          className="italic text-[#3E4F45]/70"
+          title="Roll number not assigned yet — showing enrollment number"
+        >
+          {r.enrollment_no}
+        </span>
+      );
+    }
+    return <span>{r.enrollment_no}</span>;
+  };
+
   const courses = useMemo(() => {
     const set = new Set(results.map((r) => r.course).filter(Boolean));
     return ["All", ...Array.from(set)];
@@ -248,7 +264,7 @@ const MobileQuizResults = () => {
                         {r.student_name}
                       </div>
                       <div className="text-xs text-[#3E4F45] font-semibold mt-1">
-                        {r.enrollment_no} • {r.course} • Sem {r.semester}
+                        {renderStudentId(r)} • {r.course} • Sem {r.semester}
                       </div>
                     </div>
                     <div className="flex flex-col items-end">
@@ -281,7 +297,7 @@ const MobileQuizResults = () => {
                       {r.student_name}
                     </div>
                     <div className="text-xs text-[#3E4F45] font-semibold mt-1">
-                      {r.enrollment_no} • {r.course} • Sem {r.semester}
+                      {renderStudentId(r)} • {r.course} • Sem {r.semester}
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
@@ -313,7 +329,7 @@ const MobileQuizResults = () => {
                       {r.student_name}
                     </div>
                     <div className="text-xs text-[#3E4F45] font-semibold mt-1">
-                      {r.enrollment_no} • {r.course} • Sem {r.semester}
+                      {renderStudentId(r)} • {r.course} • Sem {r.semester}
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
