@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
+import os
 from datetime import datetime
 from database import get_db
 from models.event import Event, EventReport
@@ -9,11 +10,17 @@ from services.auth import require_role
 from schemas.event import EventOut, EventCreate, EventUpdate, EventCancelSchema
 # from models.admin import Admin  # needed for admin dashboard route
 from schemas.quiz import QuizTemplateOut,QuizTemplateCreate
-import os
-
+from models.notification import Notification
+from models.admin import Admin
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 from models.event import Event, EventReport, EventRSVP
+
+
+def student_display_id(student: Student) -> str:
+    """Roll number if assigned, else fall back to enrollment number."""
+    return student.roll_number if student.roll_number else student.enrollment_no
+
 
 @router.get("/events")
 def get_admin_events(
@@ -37,6 +44,10 @@ def get_admin_events(
             
         quizzes_count_str = f"{completed_templates}/{total_templates}"
         attendees_count = db.query(EventRSVP).filter(EventRSVP.event_id == event.id).count()
+        
+        # look up faculty name from the event's admin_id
+        creator = db.query(Admin).filter(Admin.id == event.admin_id).first()
+        faculty_name = creator.name if creator else "Unknown"
         
         # performance logic based on GWBS average
         event_gwbs_attempts = db.query(QuizAttempt.total_score).join(
@@ -69,7 +80,8 @@ def get_admin_events(
             "description": event.description,
             "quizzes_count": quizzes_count_str,
             "attendees_count": attendees_count,
-            "performance": perf_str
+            "performance": perf_str,
+            "faculty_name": faculty_name
         })
     return result
 
@@ -206,7 +218,13 @@ def create_event(
             title=f"{quiz_type} Assessment"
         )
         db.add(new_quiz)
-
+        db.flush()
+    db.add(Notification(
+        title="New event scheduled",
+        message=f"{new_event.title} has been scheduled for {new_event.event_date.isoformat()}.",
+        type="event_created",
+        event_id=new_event.id
+    ))
     db.commit()
 
     return {"message": "Event created successfully", "event_id": str(new_event.id)}
@@ -262,7 +280,12 @@ def cancel_event(
     event.status = "cancelled"
     event.cancelled_at = datetime.now()
     event.cancellation_reason = data.cancellation_reason
-
+    db.add(Notification(
+        title="Event cancelled",
+        message=f"{event.title} has been cancelled.",
+        type="event_cancelled",
+        event_id=event.id
+    ))
     db.commit()
     db.refresh(event)
 
@@ -301,6 +324,12 @@ async def upload_report(
         uploaded_at=datetime.now()
     )
     db.add(new_report)
+    db.add(Notification(
+        title="Results published",
+        message=f"A report has been uploaded for {event.title}.",
+        type="results_published",
+        event_id=event_id
+    ))
     db.commit()
 
     return {"message": "Report uploaded successfully"}
@@ -380,6 +409,12 @@ def add_quiz_to_event(
         title=data.title
     )
     db.add(new_quiz)
+    db.add(Notification(
+        title="New quiz assigned",
+        message=f"{data.quiz_type} has been added to {event.title}.",
+        type="quiz_assigned",
+        event_id=event_id
+    ))
     db.commit()
     db.refresh(new_quiz)
 
@@ -414,7 +449,8 @@ def get_scq_results(
         "results": [
             {
                 "student_name": student.name,
-                "enrollment_no": student.enrollment_no,
+                "enrollment_no": student_display_id(student),
+                "is_provisional_id": student.roll_number is None,
                 "total_score": attempt.total_score,
                 "interpretation": attempt.result_json.get("interpretation"),
                 "dimension_scores": attempt.result_json.get("dimension_scores")
@@ -451,7 +487,8 @@ def get_gwbs_results(
         "results": [
             {
                 "student_name": student.name,
-                "enrollment_no": student.enrollment_no,
+                "enrollment_no": student_display_id(student),
+                "is_provisional_id": student.roll_number is None,
                 "total_score": attempt.total_score,
                 "interpretation": attempt.result_json.get("interpretation"),
                 "dimension_scores": attempt.result_json.get("dimension_scores")
@@ -488,7 +525,8 @@ def get_tabbps_results(
         "results": [
             {
                 "student_name": student.name,
-                "enrollment_no": student.enrollment_no,
+                "enrollment_no": student_display_id(student),
+                "is_provisional_id": student.roll_number is None,
                 "final_classification": attempt.result_json.get("final_classification"),
                 "form_a_score": attempt.result_json.get("form_a_score"),
                 "form_a_interpretation": attempt.result_json.get("form_a_interpretation"),
@@ -529,7 +567,8 @@ def get_ei_results(
     "results": [
         {
             "student_name": student.name,
-            "enrollment_no": student.enrollment_no,
+            "enrollment_no": student_display_id(student),
+            "is_provisional_id": student.roll_number is None,
             "Self_Awareness": {
                 "score": attempt.result_json.get("competency_scores", {}).get("Self_Awareness"),
                 "interpretation": attempt.result_json.get("competency_interpretations", {}).get("Self_Awareness")
@@ -582,7 +621,8 @@ def get_overall_results(
         if sid not in student_map:
             student_map[sid] = {
                 "student_name": student.name,
-                "enrollment_no": student.enrollment_no,
+                "enrollment_no": student_display_id(student),
+                "is_provisional_id": student.roll_number is None,
                 "SCQ": None,
                 "GWBS": None,
                 "TABBPS": None,
@@ -645,7 +685,8 @@ def get_event_results(
     return [
         {
             "student_name": student.name,
-            "enrollment_no": student.enrollment_no,
+            "enrollment_no": student_display_id(student),
+            "is_provisional_id": student.roll_number is None,
             "quiz_type": quiz_template.quiz_type,
             "total_score": attempt.total_score,
             "result_json": attempt.result_json,
@@ -653,3 +694,33 @@ def get_event_results(
         }
         for attempt, student, quiz_template in results
     ]
+@router.patch("/events/{event_id}/complete")
+def complete_event(
+    event_id: str,
+    db: Session = Depends(get_db),
+    current_user = Depends(require_role("admin"))
+):
+    event = db.query(Event).filter(Event.id == event_id).first()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if event.status == "cancelled":
+        raise HTTPException(status_code=400, detail="Cancelled events cannot be marked as completed")
+
+    if event.status == "completed":
+        raise HTTPException(status_code=400, detail="Event is already marked as completed")
+
+    event.status = "completed"
+
+    db.add(Notification(
+        title="Event completed",
+        message=f"{event.title} has been marked as completed.",
+        type="event_completed",
+        event_id=event.id
+    ))
+
+    db.commit()
+    db.refresh(event)
+
+    return {"message": "Event marked as completed"}

@@ -52,6 +52,7 @@ def register_student(payload: StudentCreate, db: Session = Depends(get_db)):
 
     student = Student(
         enrollment_no=payload.enrollment_no,
+        roll_number=payload.roll_number,
         name=payload.name,
         email=payload.email,
         phone=payload.phone,
@@ -61,6 +62,8 @@ def register_student(payload: StudentCreate, db: Session = Depends(get_db)):
         gender=payload.gender,
         password_hash=hash_password(payload.password),
     )
+    if db.query(Student).filter(Student.roll_number == payload.roll_number).first():
+        raise HTTPException(400, "Roll number already registered")
     db.add(student)
     db.commit()
     db.refresh(student)
@@ -212,6 +215,7 @@ def update_me(
         "session": getattr(current_user, "session", None),
         "enrollment": getattr(current_user, "enrollment_no", None),
     }
+
 @router.get("/me")
 def get_me(current_user=Depends(get_current_user)):
     return {
@@ -224,4 +228,5 @@ def get_me(current_user=Depends(get_current_user)):
         "semester": getattr(current_user, "semester", None),
         "session": getattr(current_user, "session", None),
         "enrollment": getattr(current_user, "enrollment_no", None),
+        "phone": getattr(current_user, "phone", None),   # NEW
     }

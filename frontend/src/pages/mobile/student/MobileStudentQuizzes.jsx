@@ -1,26 +1,89 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../../../services/api";
 
 const MobileStudentQuizzes = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Attempted");
-  const tabs = ["Attempted", "Upcoming"];
+  const [quizzes, setQuizzes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const attemptedQuizzes = [
-    { id: 1, type: "SCQ", event: "Stress Management Workshop", date: "1 June", result: "View Results" },
-    { id: 2, type: "GWBS", event: "Stress Management Workshop", date: "1 June", result: "View Results" },
-    { id: 3, type: "TABBPS", event: "Stress Management Workshop", date: "1 June", result: "View Results" },
-    { id: 4, type: "EI", event: "Stress Management Workshop", date: "1 June", result: "View Results" },
-    { id: 5, type: "GWBS", event: "Stress Management Workshop", date: "30 May", result: "View Results" },
-  ];
+  const tabs = ["Attempted", "Available"];
 
-  const upcomingQuizzes = [
-    { id: 6, type: "SCQ", event: "Stress Management Workshop", date: "1 June", action: "Attempt" },
-    { id: 7, type: "GWBS", event: "Stress Management Workshop", date: "2 June", action: null },
-    { id: 8, type: "TABBPS", event: "Stress Management Workshop", date: "2 June", action: null },
-    { id: 9, type: "EI", event: "Stress Management Workshop", date: "3 June", action: null },
-    { id: 10, type: "GWBS", event: "Stress Management Workshop", date: "30 June", action: null },
-  ];
+  useEffect(() => {
+    const fetchQuizzes = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const rsvpResponse = await API.get("/student/rsvps");
+        const events = rsvpResponse.data;
+
+        const requests = events.map(async (event) => {
+          const response = await API.get(
+            `/student/events/${event.id}/quizzes`
+          );
+
+          return response.data.map((quiz) => ({
+            ...quiz,
+            event_id: event.id,
+            event: event.title,
+            date: event.event_date,
+            event_status: event.status,
+          }));
+        });
+
+        const results = await Promise.all(requests);
+        setQuizzes(results.flat());
+      } catch (err) {
+        console.error("Failed to fetch quizzes:", err);
+        setError(
+          err.response?.data?.detail || "Failed to load quizzes."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuizzes();
+  }, []);
+
+  const formatDate = (date) => {
+    if (!date) return "-";
+
+    return new Date(date).toLocaleDateString("en-US", {
+      day: "numeric",
+      month: "long",
+    });
+  };
+
+  const attemptedQuizzes = quizzes.filter(
+    (quiz) => quiz.status === "submitted"
+  );
+
+  const availableQuizzes = quizzes.filter(
+    (quiz) => quiz.status === "available"
+  );
+
+  const displayedQuizzes =
+    activeTab === "Attempted"
+      ? attemptedQuizzes
+      : availableQuizzes;
+
+  const handleAttempt = (quiz) => {
+    navigate(
+      `/student/quizzes/${quiz.event_id}/${quiz.quiz_type}/attempt`
+    );
+  };
+
+  const handleViewResults = (quiz) => {
+    if (!quiz.attempt_id) return;
+
+    navigate(
+      `/student/quizzes/${quiz.attempt_id}/results`
+    );
+  };
 
   return (
     <div className="w-full h-full flex flex-col font-sans relative">
@@ -29,7 +92,7 @@ const MobileStudentQuizzes = () => {
           My Quizzes
         </h1>
         <p className="text-sm text-[#9DB1A3] font-medium">
-          Retake quizzes to improve results
+          View completed quizzes and available assessments
         </p>
       </div>
 
@@ -51,63 +114,61 @@ const MobileStudentQuizzes = () => {
 
       <div className="bg-[#F3F2F2] rounded-3xl p-8 flex-1 overflow-auto">
         <div className="flex flex-col h-full">
-          {/* Removed table header for mobile layout */}
           <div className="flex flex-col gap-4 mt-6 overflow-y-auto pr-2 pb-10">
-            {activeTab === "Attempted" &&
-              attemptedQuizzes.map((quiz) => (
-                <div
-                  key={quiz.id}
-                  className="flex flex-col gap-2 bg-[#E5E5E5] border border-[#2F3C36] rounded-xl px-5 py-4"
-                >
-                  <div className="flex justify-between items-center border-b border-[#2F3C36]/20 pb-2">
-                    <span className="text-[#3A8458] font-sans font-bold text-lg">
-                      {quiz.type}
-                    </span>
-                    <span className="text-[#3E4F45] text-xs font-semibold bg-[#2F3C36]/10 px-2 py-1 rounded">
-                      {quiz.date}
-                    </span>
-                  </div>
-                  <div className="text-[#3E4F45] text-sm font-medium mt-1">
-                    Event: {quiz.event}
-                  </div>
-                  <div className="flex justify-end mt-2">
-                    <button
-                      onClick={() => navigate(`/student/quizzes/${quiz.id}/results`)}
-                      className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer w-full text-center"
-                    >
-                      {quiz.result}
-                    </button>
-                  </div>
-                </div>
-              ))}
+            {loading && (
+              <div className="text-center text-[#9DB1A3] py-10">
+                Loading quizzes...
+              </div>
+            )}
 
-            {activeTab === "Upcoming" &&
-              upcomingQuizzes.map((quiz) => (
+            {!loading && error && (
+              <div className="text-center text-red-500 py-10">
+                {error}
+              </div>
+            )}
+
+            {!loading && !error && displayedQuizzes.length === 0 && (
+              <div className="text-center text-[#9DB1A3] py-10">
+                No {activeTab.toLowerCase()} quizzes found.
+              </div>
+            )}
+
+            {!loading &&
+              !error &&
+              displayedQuizzes.map((quiz) => (
                 <div
-                  key={quiz.id}
+                  key={`${quiz.event_id}-${quiz.quiz_template_id}`}
                   className="flex flex-col gap-2 bg-[#E5E5E5] border border-[#2F3C36] rounded-xl px-5 py-4"
                 >
                   <div className="flex justify-between items-center border-b border-[#2F3C36]/20 pb-2">
                     <span className="text-[#3A8458] font-sans font-bold text-lg">
-                      {quiz.type}
+                      {quiz.quiz_type}
                     </span>
+
                     <span className="text-[#3E4F45] text-xs font-semibold bg-[#2F3C36]/10 px-2 py-1 rounded">
-                      {quiz.date}
+                      {formatDate(quiz.date)}
                     </span>
                   </div>
+
                   <div className="text-[#3E4F45] text-sm font-medium mt-1">
                     Event: {quiz.event}
                   </div>
+
                   <div className="flex justify-end mt-2">
-                    {quiz.action ? (
+                    {quiz.status === "submitted" ? (
                       <button
-                        onClick={() => navigate(`/student/quizzes/${quiz.id}/attempt`)}
+                        onClick={() => handleViewResults(quiz)}
                         className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer w-full text-center"
                       >
-                        {quiz.action}
+                        View Results
                       </button>
                     ) : (
-                      <div className="text-xs text-gray-500 italic py-2">Not available yet</div>
+                      <button
+                        onClick={() => handleAttempt(quiz)}
+                        className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer w-full text-center"
+                      >
+                        Attempt
+                      </button>
                     )}
                   </div>
                 </div>
