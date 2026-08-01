@@ -8,28 +8,25 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    // Mock data to match designs instead of failing API call
-    setTimeout(() => {
-      setData({
-        admin_name: "Yasmin Sheikh",
-        department: "Senior Technical Faculty, IIPS DAVV",
-        stats: {
-          total_events: 12,
-          total_quizzes: 48,
-          total_students: 342,
-          avg_wellbeing: "7.4/10"
-        },
-        events_summary: [
-          { id: 1, title: "Stress Management Workshop", quizzes_count: "2/4", event_date: "2026-07-12", attendees_count: 68, performance: "High" },
-          { id: 2, title: "Emotional Intelligence Seminar", quizzes_count: "1/2", event_date: "2026-07-10", attendees_count: 50, performance: "Average" },
-          { id: 3, title: "Time Management & Wellbeing", quizzes_count: "1/1", event_date: "2026-07-24", attendees_count: 45, performance: "High" },
-          { id: 4, title: "Academic Anxiety Workshop", quizzes_count: "2/2", event_date: "2026-07-28", attendees_count: 38, performance: "Low" }
-        ]
-      });
+ useEffect(() => {
+  const fetchDashboard = async () => {
+    try {
+      setLoading(true);
+      const responseData = await AuthService.getAdminDashboard();
+      setData(responseData);
+    } catch (err) {
+      console.error("Failed to load dashboard:", err);
+      setError(
+        err.response?.data?.detail ||
+        "Failed to load dashboard data. Please try again."
+      );
+    } finally {
       setLoading(false);
-    }, 500);
-  }, []);
+    }
+  };
+
+  fetchDashboard();
+}, []);
 
   const handleDownloadSummary = () => {
     if (!data) return;

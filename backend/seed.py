@@ -1,4 +1,4 @@
-import sys
+"""import sys
 import os
 import uuid
 import random
@@ -394,3 +394,4 @@ def seed_db():
 
 if __name__ == "__main__":
     seed_db()
+"""

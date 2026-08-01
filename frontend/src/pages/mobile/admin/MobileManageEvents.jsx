@@ -11,8 +11,16 @@ const MobileManageEvents = () => {
   const [activeTab, setActiveTab] = useState("Active Events"); // "Past Events" or "Active Events"
   const [showAddModal, setShowAddModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedPastEvent, setSelectedPastEvent] = useState(null);
+  const [pastEventQuizzes, setPastEventQuizzes] = useState([]);
+  const [loadingPastEventQuizzes, setLoadingPastEventQuizzes] = useState(false);
+  const [pastEventQuizzesError, setPastEventQuizzesError] = useState("");
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showErrorBanner, setShowErrorBanner] = useState(false);
+  const [errorBannerMessage, setErrorBannerMessage] = useState("");
 
   // Form states
   const [title, setTitle] = useState("");
@@ -30,73 +38,23 @@ const MobileManageEvents = () => {
   const [otp, setOtp] = useState("4821");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
 
   const tabs = ["Past Events", "Active Events"];
 
-  const fetchEvents = () => {
+  const fetchEvents = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const mockEvents = [
-        {
-          id: 1,
-          title: "Stress Management Workshop",
-          venue: "Seminar Hall A, Block 3",
-          event_date: "2026-07-25",
-          event_time: "14:00",
-          end_time: "16:00",
-          description: "A hands-on session exploring stress management techniques and psychological resilience strategies for college students.",
-          quizzes_count: "2/4",
-          attendees_count: 68,
-          status: "scheduled",
-          performance: "Average",
-          quizzes: { SCQ: true, GWBS: true, TABBPS: false, EI: false }
-        },
-        {
-          id: 2,
-          title: "Anxiety & Mental Health Talk",
-          venue: "Main Auditorium",
-          event_date: "2026-08-05",
-          event_time: "10:00",
-          end_time: "12:00",
-          description: "A talk about understanding anxiety.",
-          quizzes_count: "1/4",
-          attendees_count: 120,
-          status: "scheduled",
-          performance: "Pending",
-          quizzes: { SCQ: false, GWBS: false, TABBPS: false, EI: true }
-        },
-        {
-          id: 3,
-          title: "Stress Management Workshop",
-          venue: "Seminar Hall, IIPS DAVV",
-          event_date: "2026-06-12",
-          event_time: "14:00",
-          end_time: "16:00",
-          description: "Past workshop",
-          quizzes_count: "4/4",
-          attendees_count: 68,
-          status: "completed",
-          performance: "High",
-          quizzes: { SCQ: true, GWBS: true, TABBPS: true, EI: true }
-        },
-        {
-          id: 4,
-          title: "Type A/B Personality Seminar",
-          venue: "Room 101",
-          event_date: "2026-05-10",
-          event_time: "11:00",
-          end_time: "13:00",
-          description: "Seminar on personality types",
-          quizzes_count: "2/4",
-          attendees_count: 45,
-          status: "completed",
-          performance: "Average",
-          quizzes: { SCQ: false, GWBS: false, TABBPS: true, EI: false }
-        }
-      ];
-      setEvents(mockEvents);
+    setError("");
+    try {
+      const data = await AuthService.getAdminEvents();
+      setEvents(data);
+    } catch (err) {
+      console.error("Failed to load events:", err);
+      setError("Failed to load events. Please try again.");
+      setEvents([]);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   useEffect(() => {
@@ -120,6 +78,7 @@ const MobileManageEvents = () => {
     setSelectedQuizzes({ SCQ: true, GWBS: true, TABBPS: false, EI: false });
     setOtp("4821");
     setFormError("");
+    setCancelReason("");
   };
 
   const openAddModal = () => {
@@ -141,9 +100,24 @@ const MobileManageEvents = () => {
     setShowManageModal(true);
   };
 
+  const openPastEventDetails = async (event) => {
+    setSelectedPastEvent(event);
+    setPastEventQuizzes([]);
+    setPastEventQuizzesError("");
+    setLoadingPastEventQuizzes(true);
+    try {
+      const quizzes = await AuthService.getEventQuizzes(event.id);
+      setPastEventQuizzes(quizzes);
+    } catch (err) {
+      console.error("Failed to load quizzes for event:", err);
+      setPastEventQuizzesError("Failed to load quizzes for this event.");
+    } finally {
+      setLoadingPastEventQuizzes(false);
+    }
+  };
+
   const formatTime = (timeStr) => {
     if (!timeStr) return "";
-    // Parse time like "14:00" to "2:00 PM"
     const [h, m] = timeStr.split(":");
     const date = new Date();
     date.setHours(parseInt(h, 10));
@@ -151,42 +125,46 @@ const MobileManageEvents = () => {
     return date.toLocaleTimeString("en-US", { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
+  const toBackendTime = (timeStr) => {
+    if (!timeStr) return timeStr;
+    return timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+  };
+
   const handleAddEvent = async (e) => {
     e.preventDefault();
     setFormError("");
     setSubmitting(true);
 
-    const quizTypes = Object.keys(selectedQuizzes).filter((k) => selectedQuizzes[k]);
+    const quizOrder = ["SCQ", "GWBS", "TABBPS", "EI"];
+    const quizTypes = quizOrder.filter((k) => selectedQuizzes[k]);
     if (quizTypes.length === 0) {
       setFormError("Please select at least one quiz type to assign to this event.");
       setSubmitting(false);
       return;
     }
+    const sequences = quizTypes.map((_, idx) => idx + 1);
+
+    const payload = {
+      title,
+      venue,
+      event_date: eventDate,
+      event_time: toBackendTime(eventTime),
+      description,
+      quiz_types: quizTypes,
+      sequences
+    };
 
     try {
-      setTimeout(() => {
-        const newEvent = {
-          id: Date.now(),
-          title: title,
-          venue: venue,
-          event_date: eventDate,
-          event_time: eventTime,
-          end_time: endTime,
-          description: description,
-          quizzes_count: `${quizTypes.length}/4`,
-          attendees_count: 0,
-          status: "scheduled",
-          performance: "Pending",
-          quizzes: selectedQuizzes
-        };
-        
-        setEvents(prev => [...prev, newEvent]);
-        setShowAddModal(false);
-        resetForm();
-        setSubmitting(false);
-      }, 500);
+      await AuthService.createEvent(payload);
+      setShowAddModal(false);
+      resetForm();
+      await fetchEvents();
     } catch (err) {
-      setFormError("Failed to create event.");
+      console.error("Failed to create event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to create event. Please try again."
+      );
+    } finally {
       setSubmitting(false);
     }
   };
@@ -231,6 +209,57 @@ const MobileManageEvents = () => {
     }
   };
 
+  const handleCancelEventSubmit = async () => {
+    if (!cancelReason.trim()) {
+      setErrorBannerMessage("Please provide a cancellation reason.");
+      setShowErrorBanner(true);
+
+      setTimeout(() => {
+        setShowErrorBanner(false);
+      }, 3000);
+
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      await AuthService.cancelEvent(
+        selectedEventId,
+        cancelReason.trim()
+      );
+
+      setSuccessMessage("Event cancelled successfully.");
+      setShowSuccessBanner(true);
+
+      setShowCancelModal(false);
+      setShowManageModal(false);
+      setCancelReason("");
+
+      await fetchEvents();
+
+      setTimeout(() => {
+        setShowSuccessBanner(false);
+      }, 3000);
+    } catch (err) {
+      console.error("Error cancelling event:", err);
+
+      setErrorBannerMessage(
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Failed to cancel the event."
+      );
+
+      setShowErrorBanner(true);
+
+      setTimeout(() => {
+        setShowErrorBanner(false);
+      }, 3000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const generateNewOtp = () => {
     const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
     setOtp(newOtp);
@@ -270,19 +299,61 @@ const MobileManageEvents = () => {
         </div>
         <button
           onClick={openAddModal}
-          className="flex items-center gap-2 bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          className="flex items-center justify-center gap-2 bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-3 rounded-lg transition-colors w-full"
         >
           <Plus className="w-4 h-4" />
           Add Event
         </button>
       </div>
 
-      <div className="flex gap-4 mb-8">
+      {showSuccessBanner && (
+        <div className="fixed top-4 left-4 right-4 z-[100] animate-fade-in">
+          <div className="flex items-center gap-3 bg-[#EAF7EE] border border-[#73D38F] rounded-xl px-4 py-3 shadow-lg">
+            <div className="w-8 h-8 shrink-0 rounded-full bg-[#2E7D4F] flex items-center justify-center">
+              <Check className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#386641]">
+                Event Cancelled
+              </p>
+              <p className="text-xs text-[#6A8070]">
+                {successMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showErrorBanner && (
+        <div className="fixed top-4 left-4 right-4 z-[100] animate-fade-in">
+          <div className="flex items-center gap-3 bg-[#FDF0F0] border border-[#F5A8A8] rounded-xl px-4 py-3 shadow-lg">
+            <div className="w-8 h-8 shrink-0 rounded-full bg-[#D14343] flex items-center justify-center">
+              <X className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#A12828]">
+                Cancellation Failed
+              </p>
+              <p className="text-xs text-[#8F5A5A]">
+                {errorBannerMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm mb-6 border border-red-100 font-semibold font-sans">
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-semibold rounded-full transition-colors ${activeTab === tab
+            className={`px-4 py-2 text-sm font-semibold rounded-full transition-colors whitespace-nowrap ${activeTab === tab
                 ? "bg-[#F3F2F2] border border-[#73D38F] text-[#386641]"
                 : "text-[#9DB1A3] hover:text-[#386641]"
               }`}
@@ -292,16 +363,14 @@ const MobileManageEvents = () => {
         ))}
       </div>
 
-      <div className="bg-[#F3F2F2] rounded-3xl p-8 flex-1 overflow-auto">
+      <div className="bg-[#F3F2F2] rounded-3xl p-6 flex-1 overflow-auto">
         {displayedEvents.length === 0 ? (
           <div className="text-center py-16 text-gray-400 font-sans font-semibold">
             No {activeTab.toLowerCase()} found.
           </div>
         ) : (
           <div className="flex flex-col h-full">
-            {/* Removed table header for mobile card layout */}
-
-            <div className="flex flex-col gap-4 mt-6 overflow-y-auto pr-2 pb-10">
+            <div className="flex flex-col gap-4 overflow-y-auto pr-1 pb-10">
               {displayedEvents.map((event) => (
                 <div
                   key={event.id}
@@ -334,7 +403,7 @@ const MobileManageEvents = () => {
                   <div className="flex justify-end mt-1 border-t border-[#2F3C36]/20 pt-3">
                     {activeTab === "Past Events" ? (
                       <button 
-                        onClick={() => setSelectedPastEvent(event)}
+                        onClick={() => openPastEventDetails(event)}
                         className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg w-full text-center transition-colors cursor-pointer"
                       >
                         View Details
@@ -357,22 +426,22 @@ const MobileManageEvents = () => {
 
       {/* Shared Modal Form Components */}
       {(showAddModal || showManageModal) && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
-          <div className="bg-[#F3F2F2] rounded-3xl p-8 max-w-2xl w-full shadow-2xl relative border border-[#2F3C36] max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40 animate-fade-in backdrop-blur-sm">
+          <div className="bg-[#F3F2F2] rounded-3xl p-6 w-full shadow-2xl relative border border-[#2F3C36] max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => { setShowAddModal(false); setShowManageModal(false); }}
-              className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
+              className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="mb-6">
-              <h3 className="text-2xl font-bold text-[#386641] font-serif leading-none mb-2">
+            <div className="mb-6 pr-8">
+              <h3 className="text-xl font-bold text-[#386641] font-serif leading-tight mb-2">
                 {showManageModal ? "Manage event" : "Create New Event"}
               </h3>
-              <p className="text-sm text-[#9DB1A3] font-medium">
+              <p className="text-xs text-[#9DB1A3] font-medium">
                 {showManageModal ? "Edit details for this event — changes apply immediately on save" : "Fill the details to schedule a new event"}
-                {showManageModal && <span className="ml-4 text-[#3A8458] font-bold bg-[#E5E5E5] px-2 py-1 rounded-md text-xs border border-[#2F3C36]">• Scheduled</span>}
+                {showManageModal && <span className="block mt-2 text-[#3A8458] font-bold bg-[#E5E5E5] px-2 py-1 rounded-md text-xs border border-[#2F3C36] w-max">• Scheduled</span>}
               </p>
             </div>
 
@@ -395,7 +464,7 @@ const MobileManageEvents = () => {
                     onChange={(e) => setTitle(e.target.value)}
                     required
                     placeholder="e.g. Stress Management Workshop"
-                    className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45]"
+                    className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45] text-sm"
                   />
                 </div>
 
@@ -406,7 +475,7 @@ const MobileManageEvents = () => {
                     onChange={(e) => setDescription(e.target.value)}
                     rows="3"
                     placeholder="A hands-on session exploring stress management techniques..."
-                    className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45] resize-none"
+                    className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45] resize-none text-sm"
                   ></textarea>
                 </div>
 
@@ -418,7 +487,7 @@ const MobileManageEvents = () => {
                     onChange={(e) => setVenue(e.target.value)}
                     required
                     placeholder="e.g. Seminar Hall A, Block 3"
-                    className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45]"
+                    className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45] text-sm"
                   />
                 </div>
               </div>
@@ -433,27 +502,29 @@ const MobileManageEvents = () => {
                       value={eventDate}
                       onChange={(e) => setEventDate(e.target.value)}
                       required
-                      className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45]"
+                      className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45] text-sm"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-black mb-1.5 font-sans">Start time <span className="text-red-500">*</span></label>
-                    <input
-                      type="time"
-                      value={eventTime}
-                      onChange={(e) => setEventTime(e.target.value)}
-                      required
-                      className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-black mb-1.5 font-sans">End time</label>
-                    <input
-                      type="time"
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45]"
-                    />
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-black mb-1.5 font-sans">Start time <span className="text-red-500">*</span></label>
+                      <input
+                        type="time"
+                        value={eventTime}
+                        onChange={(e) => setEventTime(e.target.value)}
+                        required
+                        className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45] text-sm"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-semibold text-black mb-1.5 font-sans">End time</label>
+                      <input
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-[#386641]/50 text-[#3E4F45] text-sm"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -461,7 +532,7 @@ const MobileManageEvents = () => {
               <div className="space-y-4 pt-4 border-t border-black/10">
                 <div>
                   <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Assigned Quizzes</h4>
-                  <p className="text-xs text-[#3E4F45] mb-3">Add or remove quizzes for this event. Removing a quiz will not delete existing student submissions.</p>
+                  <p className="text-xs text-[#3E4F45] mb-3">Add or remove quizzes for this event.</p>
                 </div>
                 <div className="flex flex-col gap-3">
                   {/* SCQ */}
@@ -487,7 +558,7 @@ const MobileManageEvents = () => {
                     </div>
                     <div>
                       <div className={`text-sm font-bold font-sans ${selectedQuizzes["SCQ"] ? "text-[#386641]" : "text-gray-700"}`}>SCQ-S</div>
-                      <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">Self Concept Questionnaire — 48 questions, 6 dimensions</div>
+                      <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">Self Concept Questionnaire</div>
                     </div>
                   </label>
                   
@@ -514,7 +585,7 @@ const MobileManageEvents = () => {
                     </div>
                     <div>
                       <div className={`text-sm font-bold font-sans ${selectedQuizzes["GWBS"] ? "text-[#386641]" : "text-gray-700"}`}>GWBS-KADA</div>
-                      <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">General Well-Being Scale — 55 questions, gender-adjusted</div>
+                      <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">General Well-Being Scale</div>
                     </div>
                   </label>
 
@@ -541,7 +612,7 @@ const MobileManageEvents = () => {
                     </div>
                     <div>
                       <div className={`text-sm font-bold font-sans ${selectedQuizzes["TABBPS"] ? "text-[#386641]" : "text-gray-700"}`}>TABBPS-DJ</div>
-                      <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">Type A/B Behaviour Pattern — 33 questions, dual form</div>
+                      <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">Type A/B Behaviour Pattern</div>
                     </div>
                   </label>
 
@@ -568,7 +639,7 @@ const MobileManageEvents = () => {
                     </div>
                     <div>
                       <div className={`text-sm font-bold font-sans ${selectedQuizzes["EI"] ? "text-[#386641]" : "text-gray-700"}`}>EI-LAL</div>
-                      <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">Emotional Intelligence — 50 questions, 5 competencies</div>
+                      <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">Emotional Intelligence</div>
                     </div>
                   </label>
                 </div>
@@ -578,7 +649,7 @@ const MobileManageEvents = () => {
                 <div className="space-y-4 pt-4 border-t border-black/10">
                   <div>
                     <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Attendance OTP</h4>
-                    <p className="text-xs text-[#3E4F45] mb-3">Regenerating the OTP invalidates the old one. Only do this before the event starts.</p>
+                    <p className="text-xs text-[#3E4F45] mb-3">Regenerating invalidates the old one.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-black mb-1.5 font-sans">OTP <span className="text-red-500">*</span></label>
@@ -587,47 +658,45 @@ const MobileManageEvents = () => {
                         type="text"
                         value={otp}
                         readOnly
-                        className="w-32 border border-[#2F3C36]/20 rounded-xl px-4 py-3 bg-white text-center font-bold tracking-[0.5em] text-lg text-black font-sans focus:outline-none"
+                        className="w-28 border border-[#2F3C36]/20 rounded-xl px-4 py-2.5 bg-white text-center font-bold tracking-[0.3em] text-lg text-black font-sans focus:outline-none"
                       />
                       <button 
                         type="button" 
                         onClick={generateNewOtp}
-                        className="border border-[#2F3C36]/20 bg-white px-4 py-3 rounded-xl text-sm font-semibold text-black hover:bg-gray-50 transition-colors cursor-pointer"
+                        className="border border-[#2F3C36]/20 bg-white px-4 py-2.5 rounded-xl text-sm font-semibold text-black hover:bg-gray-50 transition-colors cursor-pointer flex-1"
                       >
                         Regenerate
                       </button>
                     </div>
-                    <p className="text-xs text-[#9DB1A3] mt-2 font-medium">4 digits only. Students get 3 attempts before being blocked.</p>
                   </div>
                 </div>
               )}
 
-              <div className="flex justify-between items-center pt-6 border-t border-black/10">
-                {showManageModal ? (
+              <div className="pt-6 border-t border-black/10">
+                {showManageModal && (
                   <button
                     type="button"
-                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
+                    onClick={() => setShowCancelModal(true)}
+                    className="w-full justify-center text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-3 mb-3 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
                   >
                     <X className="w-4 h-4" /> Cancel event
                   </button>
-                ) : (
-                  <div></div>
                 )}
                 
-                <div className="flex flex-col w-full gap-3 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => { setShowAddModal(false); setShowManageModal(false); }}
-                    className="border border-[#2F3C36]/20 bg-white text-black px-6 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors cursor-pointer text-sm"
-                  >
-                    Discard changes
-                  </button>
+                <div className="flex flex-col w-full gap-3">
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="bg-[#2E7D4F] hover:bg-[#256641] text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm"
+                    className="bg-[#2E7D4F] hover:bg-[#256641] text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm w-full"
                   >
                     {submitting ? "Saving..." : "Save changes"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddModal(false); setShowManageModal(false); }}
+                    className="border border-[#2F3C36]/20 bg-white text-black px-6 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors cursor-pointer text-sm w-full"
+                  >
+                    Discard changes
                   </button>
                 </div>
               </div>
@@ -636,22 +705,78 @@ const MobileManageEvents = () => {
         </div>
       )}
 
-      {/* Past Event Details Modal */}
-      {selectedPastEvent && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
-          <div className="bg-[#F3F2F2] rounded-3xl p-8 max-w-2xl w-full shadow-2xl relative border border-[#2F3C36] max-h-[90vh] overflow-y-auto">
+      {/* NEW Cancel Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+          <div className="bg-[#F3F2F2] rounded-3xl p-6 w-full shadow-2xl relative border border-[#2F3C36]">
             <button
-              onClick={() => setSelectedPastEvent(null)}
-              className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
+              onClick={() => { setShowCancelModal(false); setCancelReason(""); }}
+              className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="mb-6">
-              <h3 className="text-2xl font-bold text-[#386641] font-serif leading-none mb-2">
+            <div className="mb-6 pr-8">
+              <h3 className="text-xl font-bold text-red-600 font-serif leading-tight mb-2">
+                Cancel Event
+              </h3>
+              <p className="text-xs text-[#9DB1A3] font-medium">
+                This action cannot be undone. Please provide a reason for cancellation.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-black mb-1.5 font-sans">
+                  Cancellation Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  rows="3"
+                  placeholder="e.g. Due to unforeseen circumstances..."
+                  className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-red-500/50 text-[#3E4F45] resize-none text-sm"
+                ></textarea>
+              </div>
+
+              <div className="flex flex-col gap-3 pt-4 border-t border-[#2F3C36]/10">
+                <button
+                  type="button"
+                  onClick={handleCancelEventSubmit}
+                  disabled={submitting}
+                  className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm w-full"
+                >
+                  {submitting ? "Cancelling..." : "Confirm Cancel"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowCancelModal(false); setCancelReason(""); }}
+                  className="border border-[#2F3C36]/20 bg-white text-black px-6 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors cursor-pointer text-sm w-full"
+                >
+                  Nevermind
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Past Event Details Modal */}
+      {selectedPastEvent && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40 animate-fade-in backdrop-blur-sm">
+          <div className="bg-[#F3F2F2] rounded-3xl p-6 w-full shadow-2xl relative border border-[#2F3C36] max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setSelectedPastEvent(null)}
+              className="absolute top-5 right-5 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-6 pr-8">
+              <h3 className="text-xl font-bold text-[#386641] font-serif leading-tight mb-2">
                 Past Event Details
               </h3>
-              <p className="text-sm text-[#9DB1A3] font-medium">
+              <p className="text-xs text-[#9DB1A3] font-medium">
                 Overview of the event and quizzes taken
               </p>
             </div>
@@ -666,56 +791,76 @@ const MobileManageEvents = () => {
                   </div>
                 </div>
                 
-                <div>
-                  <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Date & Time</h4>
-                  <div className="text-[#3E4F45] font-medium text-sm">
-                    {new Date(selectedPastEvent.event_date).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric"
-                    })} • {formatTime(selectedPastEvent.event_time)}
+                <div className="flex gap-8">
+                  <div>
+                    <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Date & Time</h4>
+                    <div className="text-[#3E4F45] font-medium text-sm">
+                      {new Date(selectedPastEvent.event_date).toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric"
+                      })} <br/> {formatTime(selectedPastEvent.event_time)}
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Attendees</h4>
-                  <div className="text-[#3E4F45] font-medium text-sm">{selectedPastEvent.attendees_count} Students</div>
+                  <div>
+                    <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Attendees</h4>
+                    <div className="text-[#3E4F45] font-medium text-sm">{selectedPastEvent.attendees_count} Students</div>
+                  </div>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-black/10">
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-3">Quizzes Taken</h4>
-                <div className="flex flex-col gap-4">
-                  {Object.entries(selectedPastEvent.quizzes).filter(([_, isSelected]) => isSelected).map(([quizName]) => {
-                    let quizId = 1;
-                    let fullName = quizName;
-                    if (quizName === 'SCQ') { quizId = 1; fullName = 'Self Concept Questionnaire (SCQ)'; }
-                    else if (quizName === 'GWBS') { quizId = 2; fullName = 'General Well-Being Scale (GWBS)'; }
-                    else if (quizName === 'TABBPS') { quizId = 3; fullName = 'Type A/B Behaviour Pattern (TABBPS)'; }
-                    else if (quizName === 'EI') { quizId = 4; fullName = 'Emotional Intelligence (EI)'; }
+                <div className="flex flex-col gap-3">
+                  {loadingPastEventQuizzes ? (
+                    <div className="text-sm text-[#9DB1A3] font-medium">
+                      Loading quizzes...
+                    </div>
+                  ) : pastEventQuizzesError ? (
+                    <div className="text-sm text-red-600 font-medium">
+                      {pastEventQuizzesError}
+                    </div>
+                  ) : pastEventQuizzes.length === 0 ? (
+                    <div className="text-sm text-[#9DB1A3] font-medium">
+                      No quiz data available for this event.
+                    </div>
+                  ) : (
+                    pastEventQuizzes.map((quiz) => {
+                      const quizNameMap = {
+                        SCQ: "Self Concept Questionnaire",
+                        GWBS: "General Well-Being Scale",
+                        TABBPS: "Type A/B Behaviour Pattern",
+                        EI: "Emotional Intelligence"
+                      };
+                      const fullName = quizNameMap[quiz.quiz_type] || quiz.title || quiz.quiz_type;
 
-                    return (
-                      <div 
-                        key={quizName}
-                        onClick={() => navigate(`/admin/quizzes/${quizId}/results`)}
-                        className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] hover:shadow-md transition-all group"
-                      >
-                        <div className="text-[#3A8458] font-bold font-sans text-lg group-hover:text-[#2E7D4F] transition-colors">{quizName}</div>
-                        <div className="text-xs text-[#9DB1A3] mt-1 font-medium">{fullName}</div>
-                        <div className="mt-3 text-xs font-bold text-[#2E7D4F] uppercase tracking-wider flex items-center gap-1">
-                          View Results &rarr;
+                      return (
+                        <div 
+                          key={quiz.id}
+                          onClick={() => {
+                            setSelectedPastEvent(null);
+                            navigate(`/admin/quizzes/${quiz.id}/results?eventId=${selectedPastEvent.id}&quizType=${quiz.quiz_type}`);
+                          }}
+                          className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] shadow-sm transition-all group"
+                        >
+                          <div className="text-[#3A8458] font-bold font-sans text-base">{quiz.quiz_type}</div>
+                          <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">{fullName}</div>
+                          <div className="mt-3 text-xs font-bold text-[#2E7D4F] uppercase tracking-wider flex items-center gap-1">
+                            View Results &rarr;
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="mt-8 flex justify-end">
+            <div className="mt-6 pt-4 border-t border-black/10">
               <button
                 onClick={() => setSelectedPastEvent(null)}
-                className="bg-[#2E7D4F] hover:bg-[#256641] text-white px-6 py-2.5 rounded-lg font-medium transition-colors cursor-pointer text-sm"
+                className="bg-[#2E7D4F] hover:bg-[#256641] text-white px-6 py-3 rounded-lg font-medium transition-colors cursor-pointer text-sm w-full"
               >
                 Close
               </button>

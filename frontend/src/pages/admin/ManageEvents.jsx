@@ -11,8 +11,16 @@ const ManageEvents = () => {
   const [activeTab, setActiveTab] = useState("Active Events"); // "Past Events" or "Active Events"
   const [showAddModal, setShowAddModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedPastEvent, setSelectedPastEvent] = useState(null);
+  const [pastEventQuizzes, setPastEventQuizzes] = useState([]);
+  const [loadingPastEventQuizzes, setLoadingPastEventQuizzes] = useState(false);
+  const [pastEventQuizzesError, setPastEventQuizzesError] = useState("");
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showErrorBanner, setShowErrorBanner] = useState(false);
+  const [errorBannerMessage, setErrorBannerMessage] = useState("");
 
   // Form states
   const [title, setTitle] = useState("");
@@ -30,73 +38,23 @@ const ManageEvents = () => {
   const [otp, setOtp] = useState("4821");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
 
   const tabs = ["Past Events", "Active Events"];
 
-  const fetchEvents = () => {
+  const fetchEvents = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const mockEvents = [
-        {
-          id: 1,
-          title: "Stress Management Workshop",
-          venue: "Seminar Hall A, Block 3",
-          event_date: "2026-07-25",
-          event_time: "14:00",
-          end_time: "16:00",
-          description: "A hands-on session exploring stress management techniques and psychological resilience strategies for college students.",
-          quizzes_count: "2/4",
-          attendees_count: 68,
-          status: "scheduled",
-          performance: "Average",
-          quizzes: { SCQ: true, GWBS: true, TABBPS: false, EI: false }
-        },
-        {
-          id: 2,
-          title: "Anxiety & Mental Health Talk",
-          venue: "Main Auditorium",
-          event_date: "2026-08-05",
-          event_time: "10:00",
-          end_time: "12:00",
-          description: "A talk about understanding anxiety.",
-          quizzes_count: "1/4",
-          attendees_count: 120,
-          status: "scheduled",
-          performance: "Pending",
-          quizzes: { SCQ: false, GWBS: false, TABBPS: false, EI: true }
-        },
-        {
-          id: 3,
-          title: "Stress Management Workshop",
-          venue: "Seminar Hall, IIPS DAVV",
-          event_date: "2026-06-12",
-          event_time: "14:00",
-          end_time: "16:00",
-          description: "Past workshop",
-          quizzes_count: "4/4",
-          attendees_count: 68,
-          status: "completed",
-          performance: "High",
-          quizzes: { SCQ: true, GWBS: true, TABBPS: true, EI: true }
-        },
-        {
-          id: 4,
-          title: "Type A/B Personality Seminar",
-          venue: "Room 101",
-          event_date: "2026-05-10",
-          event_time: "11:00",
-          end_time: "13:00",
-          description: "Seminar on personality types",
-          quizzes_count: "2/4",
-          attendees_count: 45,
-          status: "completed",
-          performance: "Average",
-          quizzes: { SCQ: false, GWBS: false, TABBPS: true, EI: false }
-        }
-      ];
-      setEvents(mockEvents);
+    setError("");
+    try {
+      const data = await AuthService.getAdminEvents();
+      setEvents(data);
+    } catch (err) {
+      console.error("Failed to load events:", err);
+      setError("Failed to load events. Please try again.");
+      setEvents([]);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   useEffect(() => {
@@ -120,6 +78,7 @@ const ManageEvents = () => {
     setSelectedQuizzes({ SCQ: true, GWBS: true, TABBPS: false, EI: false });
     setOtp("4821");
     setFormError("");
+    setCancelReason("");
   };
 
   const openAddModal = () => {
@@ -141,6 +100,22 @@ const ManageEvents = () => {
     setShowManageModal(true);
   };
 
+  const openPastEventDetails = async (event) => {
+    setSelectedPastEvent(event);
+    setPastEventQuizzes([]);
+    setPastEventQuizzesError("");
+    setLoadingPastEventQuizzes(true);
+    try {
+      const quizzes = await AuthService.getEventQuizzes(event.id);
+      setPastEventQuizzes(quizzes);
+    } catch (err) {
+      console.error("Failed to load quizzes for event:", err);
+      setPastEventQuizzesError("Failed to load quizzes for this event.");
+    } finally {
+      setLoadingPastEventQuizzes(false);
+    }
+  };
+
   const formatTime = (timeStr) => {
     if (!timeStr) return "";
     // Parse time like "14:00" to "2:00 PM"
@@ -151,42 +126,49 @@ const ManageEvents = () => {
     return date.toLocaleTimeString("en-US", { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
+  // Converts a "HH:MM" input value into the "HH:MM:00" format the backend expects.
+  // Leaves already-complete "HH:MM:SS" strings untouched.
+  const toBackendTime = (timeStr) => {
+    if (!timeStr) return timeStr;
+    return timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+  };
+
   const handleAddEvent = async (e) => {
     e.preventDefault();
     setFormError("");
     setSubmitting(true);
 
-    const quizTypes = Object.keys(selectedQuizzes).filter((k) => selectedQuizzes[k]);
+    // quiz_types in a fixed, predictable order; sequences generated to match [1, 2, ...]
+    const quizOrder = ["SCQ", "GWBS", "TABBPS", "EI"];
+    const quizTypes = quizOrder.filter((k) => selectedQuizzes[k]);
     if (quizTypes.length === 0) {
       setFormError("Please select at least one quiz type to assign to this event.");
       setSubmitting(false);
       return;
     }
+    const sequences = quizTypes.map((_, idx) => idx + 1);
+
+    const payload = {
+      title,
+      venue,
+      event_date: eventDate,
+      event_time: toBackendTime(eventTime),
+      description,
+      quiz_types: quizTypes,
+      sequences
+    };
 
     try {
-      setTimeout(() => {
-        const newEvent = {
-          id: Date.now(),
-          title: title,
-          venue: venue,
-          event_date: eventDate,
-          event_time: eventTime,
-          end_time: endTime,
-          description: description,
-          quizzes_count: `${quizTypes.length}/4`,
-          attendees_count: 0,
-          status: "scheduled",
-          performance: "Pending",
-          quizzes: selectedQuizzes
-        };
-        
-        setEvents(prev => [...prev, newEvent]);
-        setShowAddModal(false);
-        resetForm();
-        setSubmitting(false);
-      }, 500);
+      await AuthService.createEvent(payload);
+      setShowAddModal(false);
+      resetForm();
+      await fetchEvents();
     } catch (err) {
-      setFormError("Failed to create event.");
+      console.error("Failed to create event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to create event. Please try again."
+      );
+    } finally {
       setSubmitting(false);
     }
   };
@@ -230,6 +212,57 @@ const ManageEvents = () => {
       setSubmitting(false);
     }
   };
+
+    const handleCancelEventSubmit = async () => {
+      if (!cancelReason.trim()) {
+        setErrorBannerMessage("Please provide a cancellation reason.");
+        setShowErrorBanner(true);
+
+        setTimeout(() => {
+          setShowErrorBanner(false);
+        }, 3000);
+
+        return;
+      }
+
+      setSubmitting(true);
+
+      try {
+        await AuthService.cancelEvent(
+          selectedEventId,
+          cancelReason.trim()
+        );
+
+        setSuccessMessage("Event cancelled successfully.");
+        setShowSuccessBanner(true);
+
+        setShowCancelModal(false);
+        setShowManageModal(false);
+        setCancelReason("");
+
+        await fetchEvents();
+
+        setTimeout(() => {
+          setShowSuccessBanner(false);
+        }, 3000);
+      } catch (err) {
+        console.error("Error cancelling event:", err);
+
+        setErrorBannerMessage(
+          err?.response?.data?.detail ||
+          err?.message ||
+          "Failed to cancel the event."
+        );
+
+        setShowErrorBanner(true);
+
+        setTimeout(() => {
+          setShowErrorBanner(false);
+        }, 3000);
+      } finally {
+        setSubmitting(false);
+      }
+    };
 
   const generateNewOtp = () => {
     const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -276,6 +309,50 @@ const ManageEvents = () => {
           Add Event
         </button>
       </div>
+
+      {showSuccessBanner && (
+        <div className="fixed top-6 right-6 z-[100] animate-fade-in">
+          <div className="flex items-center gap-3 bg-[#EAF7EE] border border-[#73D38F] rounded-xl px-5 py-3 shadow-lg">
+            <div className="w-9 h-9 rounded-full bg-[#2E7D4F] flex items-center justify-center">
+              <Check className="w-5 h-5 text-white" />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-[#386641]">
+                Event Cancelled
+              </p>
+              <p className="text-xs text-[#6A8070]">
+                {successMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showErrorBanner && (
+        <div className="fixed top-6 right-6 z-[100] animate-fade-in">
+          <div className="flex items-center gap-3 bg-[#FDF0F0] border border-[#F5A8A8] rounded-xl px-5 py-3 shadow-lg">
+            <div className="w-9 h-9 rounded-full bg-[#D14343] flex items-center justify-center">
+              <X className="w-5 h-5 text-white" />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-[#A12828]">
+                Cancellation Failed
+              </p>
+              <p className="text-xs text-[#8F5A5A]">
+                {errorBannerMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm mb-6 border border-red-100 font-semibold font-sans">
+          {error}
+        </div>
+      )}
 
       <div className="flex gap-4 mb-8">
         {tabs.map((tab) => (
@@ -352,7 +429,7 @@ const ManageEvents = () => {
                   <div className="col-span-2 flex justify-end">
                     {activeTab === "Past Events" ? (
                       <button 
-                        onClick={() => setSelectedPastEvent(event)}
+                        onClick={() => openPastEventDetails(event)}
                         className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
                       >
                         View Details
@@ -375,7 +452,7 @@ const ManageEvents = () => {
 
       {/* Shared Modal Form Components */}
       {(showAddModal || showManageModal) && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40 animate-fade-in backdrop-blur-sm">
           <div className="bg-[#F3F2F2] rounded-3xl p-8 max-w-2xl w-full shadow-2xl relative border border-[#2F3C36] max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => { setShowAddModal(false); setShowManageModal(false); }}
@@ -624,6 +701,7 @@ const ManageEvents = () => {
                 {showManageModal ? (
                   <button
                     type="button"
+                    onClick={() => setShowCancelModal(true)}
                     className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
                   >
                     <X className="w-4 h-4" /> Cancel event
@@ -654,9 +732,65 @@ const ManageEvents = () => {
         </div>
       )}
 
+      {/* NEW Cancel Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+          <div className="bg-[#F3F2F2] rounded-3xl p-8 max-w-md w-full shadow-2xl relative border border-[#2F3C36]">
+            <button
+              onClick={() => { setShowCancelModal(false); setCancelReason(""); }}
+              className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold text-red-600 font-serif leading-none mb-2">
+                Cancel Event
+              </h3>
+              <p className="text-sm text-[#9DB1A3] font-medium">
+                This action cannot be undone. Please provide a reason for cancellation.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-black mb-1.5 font-sans">
+                  Cancellation Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  rows="3"
+                  placeholder="e.g. Due to unforeseen circumstances..."
+                  className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-red-500/50 text-[#3E4F45] resize-none"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowCancelModal(false); setCancelReason(""); }}
+                  className="border border-[#2F3C36]/20 bg-white text-black px-6 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors cursor-pointer text-sm"
+                >
+                  Nevermind
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEventSubmit}
+                  disabled={submitting}
+                  className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm"
+                >
+                  {submitting ? "Cancelling..." : "Confirm Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Past Event Details Modal */}
       {selectedPastEvent && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40 animate-fade-in backdrop-blur-sm">
           <div className="bg-[#F3F2F2] rounded-3xl p-8 max-w-2xl w-full shadow-2xl relative border border-[#2F3C36] max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedPastEvent(null)}
@@ -704,28 +838,48 @@ const ManageEvents = () => {
               <div className="pt-4 border-t border-black/10">
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-3">Quizzes Taken</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  {Object.entries(selectedPastEvent.quizzes).filter(([_, isSelected]) => isSelected).map(([quizName]) => {
-                    let quizId = 1;
-                    let fullName = quizName;
-                    if (quizName === 'SCQ') { quizId = 1; fullName = 'Self Concept Questionnaire (SCQ)'; }
-                    else if (quizName === 'GWBS') { quizId = 2; fullName = 'General Well-Being Scale (GWBS)'; }
-                    else if (quizName === 'TABBPS') { quizId = 3; fullName = 'Type A/B Behaviour Pattern (TABBPS)'; }
-                    else if (quizName === 'EI') { quizId = 4; fullName = 'Emotional Intelligence (EI)'; }
+                  {loadingPastEventQuizzes ? (
+                    <div className="col-span-2 text-sm text-[#9DB1A3] font-medium">
+                      Loading quizzes...
+                    </div>
+                  ) : pastEventQuizzesError ? (
+                    <div className="col-span-2 text-sm text-red-600 font-medium">
+                      {pastEventQuizzesError}
+                    </div>
+                  ) : pastEventQuizzes.length === 0 ? (
+                    <div className="col-span-2 text-sm text-[#9DB1A3] font-medium">
+                      No quiz data available for this event.
+                    </div>
+                  ) : (
+                    pastEventQuizzes.map((quiz) => {
+                      const quizNameMap = {
+                        SCQ: "Self Concept Questionnaire (SCQ)",
+                        GWBS: "General Well-Being Scale (GWBS)",
+                        TABBPS: "Type A/B Behaviour Pattern (TABBPS)",
+                        EI: "Emotional Intelligence (EI)"
+                      };
+                      const fullName = quizNameMap[quiz.quiz_type] || quiz.title || quiz.quiz_type;
 
-                    return (
-                      <div 
-                        key={quizName}
-                        onClick={() => navigate(`/admin/quizzes/${quizId}/results`)}
-                        className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] hover:shadow-md transition-all group"
-                      >
-                        <div className="text-[#3A8458] font-bold font-sans text-lg group-hover:text-[#2E7D4F] transition-colors">{quizName}</div>
-                        <div className="text-xs text-[#9DB1A3] mt-1 font-medium">{fullName}</div>
-                        <div className="mt-3 text-xs font-bold text-[#2E7D4F] uppercase tracking-wider flex items-center gap-1">
-                          View Results &rarr;
+                      return (
+                        <div
+                          key={quiz.id}
+                          onClick={() => {
+                            setSelectedPastEvent(null);
+                            navigate(
+                              `/admin/quizzes/${quiz.id}/results?eventId=${selectedPastEvent.id}&quizType=${quiz.quiz_type}`
+                            );
+                          }}
+                          className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] hover:shadow-md transition-all group"
+                        >
+                          <div className="text-[#3A8458] font-bold font-sans text-lg group-hover:text-[#2E7D4F] transition-colors">{quiz.quiz_type}</div>
+                          <div className="text-xs text-[#9DB1A3] mt-1 font-medium">{fullName}</div>
+                          <div className="mt-3 text-xs font-bold text-[#2E7D4F] uppercase tracking-wider flex items-center gap-1">
+                            View Results &rarr;
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>
