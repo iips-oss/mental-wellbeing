@@ -6,9 +6,8 @@ from models.quiz import QuizTemplate, QuizQuestion, QuizAttempt, QuizResponse, Q
 from models.student import Student
 from services.quiz_scoring import compute_quiz_result
 from datetime import datetime
-from services.auth import require_role 
-from schemas.quiz import QuizOut, QuizSubmit        
-
+from services.auth import require_role
+from schemas.quiz import QuizOut, QuizSubmit
 
 
 router = APIRouter(prefix="/quiz", tags=["quiz"])
@@ -18,7 +17,7 @@ router = APIRouter(prefix="/quiz", tags=["quiz"])
 def get_quiz(
     event_id: str,
     db: Session = Depends(get_db),
-    current_user = Depends(require_role("student"))
+    current_user=Depends(require_role("student"))
 ):
     student_id = current_user.id
 
@@ -49,52 +48,110 @@ def get_quiz(
     if not quizzes:
         raise HTTPException(status_code=404, detail="No quizzes found for this event")
 
-    # get questions and options for each quiz — questions are now looked up
-    # by quiz_type (shared bank), not by quiz_template_id
     result = []
     for quiz in quizzes:
+        # FIX: order by (form, question_no) instead of question_no alone.
+        # For TABBPS, both Form A and Form B share question_no values 1-16/17,
+        # so ordering only by question_no causes DB-level interleaving.
+        # nullsfirst() keeps SCQ/GWBS/EI (form=None) working correctly —
+        # nulls sort before "A"/"B", preserving their original question_no order.
         questions = db.query(QuizQuestion).filter(
             QuizQuestion.quiz_type == quiz.quiz_type
-        ).order_by(QuizQuestion.question_no).all()
+        ).order_by(QuizQuestion.form.nullsfirst(), QuizQuestion.question_no).all()
 
-        questions_data = []
-        for question in questions:
-            options = db.query(QuizOption).filter(
-                QuizOption.option_set_id == question.option_set_id
-            ).order_by(QuizOption.display_order).all()
+        if quiz.quiz_type == "TABBPS":
+            # FIX: return grouped dict {"A": [...], "B": [...]} instead of a flat
+            # list. A flat list forces the frontend to re-split by form, which is
+            # fragile and easy to get wrong. Grouping makes the contract explicit.
+            grouped = {"A": [], "B": []}
 
-            questions_data.append({
-                "id": str(question.id),
-                "question_no": question.question_no,
-                "question_text": question.question_text,
-                "area_code": question.area_code,
-                "form": question.form,
-                "option_set_id": str(question.option_set_id),
+            for question in questions:
+                options = db.query(QuizOption).filter(
+                    QuizOption.option_set_id == question.option_set_id
+                ).order_by(QuizOption.display_order).all()
+
+                q_data = {
+                    "id": str(question.id),
+                    "question_no": question.question_no,
+                    "question_text": question.question_text,
+                    "area_code": question.area_code,
+                    "form": question.form,
+                    "option_set_id": str(question.option_set_id),
+                    "quiz_template_id": str(quiz.id),
+                    "options": [
+                        {
+                            "id": str(opt.id),
+                            "option_set_id": str(opt.option_set_id),
+                            "option_text": opt.option_text,
+                            "score_value": opt.score_value,
+                            "display_order": opt.display_order
+                        }
+                        for opt in options
+                    ]
+                }
+
+                # question.form is always "A" or "B" for TABBPS rows —
+                # safe to index directly since populate_quiz_questions
+                # guarantees this invariant at seed time.
+                grouped[question.form].append(q_data)
+
+            result.append({
                 "quiz_template_id": str(quiz.id),
-                "options": [
-                    {
-                        "id": str(opt.id),
-                        "option_set_id": str(opt.option_set_id),
-                        "option_text": opt.option_text,
-                        "score_value": opt.score_value,
-                        "display_order": opt.display_order
-                    }
-                    for opt in options
-                ]
+                "quiz_type": quiz.quiz_type,
+                "title": quiz.title,
+                "sequence_no": quiz.sequence_no,
+                "questions": grouped
+                # shape: {"A": [...17 questions...], "B": [...16 questions...]}
+                # frontend: use Object.entries(questions).map(([form, qs]) => ...)
             })
 
-        result.append({
-            "quiz_template_id": str(quiz.id),
-            "quiz_type": quiz.quiz_type,
-            "title": quiz.title,
-            "sequence_no": quiz.sequence_no,
-            "questions": questions_data
-        })
+        else:
+            # SCQ, GWBS, EI — flat list, form is always None for these
+            questions_data = []
+
+            for question in questions:
+                options = db.query(QuizOption).filter(
+                    QuizOption.option_set_id == question.option_set_id
+                ).order_by(QuizOption.display_order).all()
+
+                questions_data.append({
+                    "id": str(question.id),
+                    "question_no": question.question_no,
+                    "question_text": question.question_text,
+                    "area_code": question.area_code,
+                    "form": question.form,
+                    "option_set_id": str(question.option_set_id),
+                    "quiz_template_id": str(quiz.id),
+                    "options": [
+                        {
+                            "id": str(opt.id),
+                            "option_set_id": str(opt.option_set_id),
+                            "option_text": opt.option_text,
+                            "score_value": opt.score_value,
+                            "display_order": opt.display_order
+                        }
+                        for opt in options
+                    ]
+                })
+
+            result.append({
+                "quiz_template_id": str(quiz.id),
+                "quiz_type": quiz.quiz_type,
+                "title": quiz.title,
+                "sequence_no": quiz.sequence_no,
+                "questions": questions_data
+                # shape: flat list — unchanged from original
+            })
 
     return result
 
 
-def _validate_and_score_answer(db: Session, quiz_type: str, question_id: str, selected_option_id: str):
+def _validate_and_score_answer(
+    db: Session,
+    quiz_type: str,
+    question_id: str,
+    selected_option_id: str
+):
     """
     Validates that:
       1. question_id belongs to this quiz_type's shared question bank
@@ -125,6 +182,7 @@ def _validate_and_score_answer(db: Session, quiz_type: str, question_id: str, se
         )
 
     return question, option
+
 
 @router.post("/submit")
 def submit_quiz(
@@ -169,28 +227,19 @@ def submit_quiz(
             detail="You have not registered for this event"
         )
 
-    # Get student gender for GWBS
+    # Get student gender for GWBS scoring
     student = db.query(Student).filter(
         Student.id == student_id
     ).first()
 
     gender = student.gender if student else "male"
 
-    # ---------------------------------------------------------
-    # Validate every answer once, building both:
-    #   - scoring_answers: question number -> score (for compute_quiz_result)
-    #   - response_rows: the QuizResponse objects to persist
-    # in a single pass, instead of two separate passes that each
-    # re-fetched (and previously under-validated) the same options.
-    #
-    # NOTE: questions are looked up by quiz_type (the shared question bank),
-    # not by quiz_template_id — so we pass quiz.quiz_type here, not the
-    # quiz_template_id itself.
-    # ---------------------------------------------------------
-
     response_rows = []
 
     if quiz.quiz_type == "TABBPS":
+        # answers shape expected from frontend:
+        # {"A": {"<question_id>": "<option_id>", ...}, "B": {...}}
+        # This matches the grouped response shape from GET /quiz/event/{event_id}
         scoring_answers = {"A": {}, "B": {}}
 
         for form in ["A", "B"]:
@@ -214,6 +263,7 @@ def submit_quiz(
                 })
 
     else:
+        # SCQ, GWBS, EI — answers shape: {"<question_id>": "<option_id>", ...}
         scoring_answers = {}
 
         for question_id, selected_option_id in answers.items():
@@ -246,7 +296,6 @@ def submit_quiz(
         attempt.total_score = result_json.get("total_score")
         attempt.overall_remark = result_json.get("interpretation")
         attempt.result_json = result_json
-
     else:
         attempt = QuizAttempt(
             quiz_template_id=quiz_template_id,
@@ -257,25 +306,21 @@ def submit_quiz(
             overall_remark=result_json.get("interpretation"),
             result_json=result_json
         )
-
         db.add(attempt)
 
     db.flush()
 
-    # ---------------------------------------------------------
     # Clear any pre-existing responses for this attempt before inserting
     # the new ones. Without this, resubmitting against an attempt that
     # already has QuizResponse rows (e.g. a pre-created 'not_attempted' or
     # 'in_progress' attempt with partial responses saved) would duplicate
     # rows for the same (attempt_id, question_id) instead of replacing them.
-    # ---------------------------------------------------------
-    db.query(QuizResponse).filter(QuizResponse.attempt_id == attempt.id).delete()
+    db.query(QuizResponse).filter(
+        QuizResponse.attempt_id == attempt.id
+    ).delete()
 
-    # ---------------------------------------------------------
     # Save individual QuizResponse rows using the already-validated
     # question/option pairs from the pass above.
-    # ---------------------------------------------------------
-
     for row in response_rows:
         response = QuizResponse(
             attempt_id=attempt.id,
@@ -299,7 +344,7 @@ def submit_quiz(
 def get_quiz_result(
     attempt_id: str,
     db: Session = Depends(get_db),
-    current_user = Depends(require_role("student"))
+    current_user=Depends(require_role("student"))
 ):
     student_id = current_user.id
 
