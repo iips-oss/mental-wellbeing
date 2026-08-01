@@ -20,8 +20,6 @@ def get_quiz(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("student"))
 ):
-    
-
     student_id = current_user.id
 
     # CHECK 1: has student RSVPed to this event?
@@ -51,11 +49,12 @@ def get_quiz(
     if not quizzes:
         raise HTTPException(status_code=404, detail="No quizzes found for this event")
 
-    # get questions and options for each quiz
+    # get questions and options for each quiz — questions are now looked up
+    # by quiz_type (shared bank), not by quiz_template_id
     result = []
     for quiz in quizzes:
         questions = db.query(QuizQuestion).filter(
-            QuizQuestion.quiz_template_id == quiz.id
+            QuizQuestion.quiz_type == quiz.quiz_type
         ).order_by(QuizQuestion.question_no).all()
 
         questions_data = []
@@ -70,14 +69,14 @@ def get_quiz(
                 "question_text": question.question_text,
                 "area_code": question.area_code,
                 "form": question.form,
-                "option_set_id": str(question.option_set_id),  # missing!
-                "quiz_template_id": str(quiz.id),    
+                "option_set_id": str(question.option_set_id),
+                "quiz_template_id": str(quiz.id),
                 "options": [
                     {
                         "id": str(opt.id),
-                        "option_set_id": str(opt.option_set_id), 
+                        "option_set_id": str(opt.option_set_id),
                         "option_text": opt.option_text,
-                
+                        "score_value": opt.score_value,
                         "display_order": opt.display_order
                     }
                     for opt in options
@@ -95,18 +94,17 @@ def get_quiz(
     return result
 
 
-def _validate_and_score_answer(db: Session, quiz_template_id: str, question_id: str, selected_option_id: str):
+def _validate_and_score_answer(db: Session, quiz_type: str, question_id: str, selected_option_id: str):
     """
     Validates that:
-      1. question_id belongs to this quiz template
-      2. selected_option_id belongs to that question's option set (not just
-         any valid option in the DB — this is the check that was missing)
+      1. question_id belongs to this quiz_type's shared question bank
+      2. selected_option_id belongs to that question's option set
 
     Returns (question, option) on success, raises HTTPException on failure.
     """
     question = db.query(QuizQuestion).filter(
         QuizQuestion.id == question_id,
-        QuizQuestion.quiz_template_id == quiz_template_id
+        QuizQuestion.quiz_type == quiz_type
     ).first()
 
     if not question:
@@ -127,7 +125,6 @@ def _validate_and_score_answer(db: Session, quiz_template_id: str, question_id: 
         )
 
     return question, option
-
 
 @router.post("/submit")
 def submit_quiz(
@@ -185,6 +182,10 @@ def submit_quiz(
     #   - response_rows: the QuizResponse objects to persist
     # in a single pass, instead of two separate passes that each
     # re-fetched (and previously under-validated) the same options.
+    #
+    # NOTE: questions are looked up by quiz_type (the shared question bank),
+    # not by quiz_template_id — so we pass quiz.quiz_type here, not the
+    # quiz_template_id itself.
     # ---------------------------------------------------------
 
     response_rows = []
@@ -203,7 +204,7 @@ def submit_quiz(
 
             for question_id, selected_option_id in form_answers.items():
                 question, option = _validate_and_score_answer(
-                    db, quiz_template_id, question_id, selected_option_id
+                    db, quiz.quiz_type, question_id, selected_option_id
                 )
                 scoring_answers[form][question.question_no] = option.score_value
                 response_rows.append({
@@ -217,7 +218,7 @@ def submit_quiz(
 
         for question_id, selected_option_id in answers.items():
             question, option = _validate_and_score_answer(
-                db, quiz_template_id, question_id, selected_option_id
+                db, quiz.quiz_type, question_id, selected_option_id
             )
             scoring_answers[question.question_no] = option.score_value
             response_rows.append({
@@ -300,8 +301,6 @@ def get_quiz_result(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("student"))
 ):
-    
-
     student_id = current_user.id
 
     attempt = db.query(QuizAttempt).filter(

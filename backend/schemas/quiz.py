@@ -109,10 +109,8 @@ class QuizAttemptOut(BaseModel):
     attempted_at: Optional[datetime] = None
     total_score: Optional[int] = None
     overall_remark: Annotated[Optional[str], Field(default=None, max_length=1000)]
-    
-    # Flexible json field to support diverse scoring structures across different quiz types
-    result_json: Optional[dict[str, Any]] = None 
-    # expanded score breakdown returned directly for dashboard visualizations
+    result_json: Optional[dict[str, Any]] = None
     area_scores: list[AreaScoreOut] = Field(default_factory=list)
-    
+    quiz_type: Optional[str] = None   # NEW — populated manually in the route, not from the ORM object directly
+
     model_config = ConfigDict(from_attributes=True)

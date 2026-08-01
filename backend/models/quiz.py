@@ -45,15 +45,19 @@ class QuizTemplate(Base):
 
     # relationships
     event = relationship("Event", back_populates="quiz_templates")
-    questions = relationship("QuizQuestion", back_populates="quiz_template")
     attempts = relationship("QuizAttempt", back_populates="quiz_template")
+    # NOTE: no `questions` relationship anymore — question banks are shared
+    # across all templates of the same quiz_type, not owned by one template.
 
 
 class QuizQuestion(Base):
     __tablename__ = "quiz_questions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    quiz_template_id = Column(String, ForeignKey("quiz_templates.id"), nullable=False)
+    quiz_type = Column(String, nullable=False)
+    # quiz_type = 'SCQ' | 'GWBS' | 'TABBPS' | 'EI'
+    # Shared question bank keyed by quiz_type — NOT by quiz_template_id.
+    # This is what prevents questions from being duplicated per event.
     option_set_id = Column(String, ForeignKey("option_sets.id"), nullable=False)
     question_no = Column(Integer, nullable=False)
     question_text = Column(Text, nullable=False)
@@ -65,8 +69,11 @@ class QuizQuestion(Base):
 
     # no polarity column — reversal logic lives in Python scoring functions only
 
+    __table_args__ = (
+        UniqueConstraint("quiz_type", "question_no", "form", name="uq_question_type_no_form"),
+    )
+
     # relationships
-    quiz_template = relationship("QuizTemplate", back_populates="questions")
     option_set = relationship("OptionSet", back_populates="questions")
     responses = relationship("QuizResponse", back_populates="question")
 

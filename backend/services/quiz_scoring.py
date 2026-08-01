@@ -233,14 +233,27 @@ def score_EI(answers: Dict[int, int]) -> Dict[str, Any]:
             interp = "Average"
         competency_interpretations[comp] = interp
 
+    strengths = sum(1 for v in competency_interpretations.values() if v == "Strength")
+    if strengths >= 4:
+        overall_interpretation = "High Emotional Intelligence"
+    elif strengths >= 2:
+        overall_interpretation = "Above Average EI"
+    elif strengths >= 1:
+        overall_interpretation = "Average EI"
+    else:
+        overall_interpretation = "Developing EI"
+
+    total = sum(competency_scores.values())
+
     return {
         "quiz_type": "EI",
-        "total_score": None,       # EI has no meaningful overall score
-        "interpretation": None,    # interpreted per competency only
+        "total_score": total if total > 0 else None,
+        "interpretation": overall_interpretation,
+        "strengths_count": strengths,
         "competency_scores": competency_scores,
         "competency_interpretations": competency_interpretations,
-        "max_possible": None,
-        "note": "EI is evaluated per competency, not as a single score",
+        "max_possible": 250,
+        "note": "EI is evaluated per competency as well as overall score",
     }
 
 
