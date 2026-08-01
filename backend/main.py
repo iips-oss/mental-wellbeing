@@ -10,6 +10,7 @@ from routes.quiz import router as quiz_router
 from routes.admin import router as admin_router
 from routes.student import router as student_router
 from routes.superuser import router as superuser_router
+from routes.notification import router as notifications_router
 from fastapi.middleware.cors import CORSMiddleware
 
 Base.metadata.create_all(bind=engine)
@@ -39,7 +40,7 @@ app.include_router(quiz_router)
 app.include_router(admin_router)
 app.include_router(student_router)
 app.include_router(superuser_router)
-
+app.include_router(notifications_router)
 @app.get("/")
 def root():
     return {"message": "API is running"}

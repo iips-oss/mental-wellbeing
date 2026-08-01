@@ -5,10 +5,10 @@ from models.event import Event, EventRSVP
 from models.student import Student
 from models.quiz import QuizAttempt, QuizTemplate
 from schemas.event import EventOut, EventRSVPCreate
-from schemas.student import DashboardOut
+from schemas.student import DashboardOut, ScqProgressOut
 from services.auth import require_role
 from schemas.quiz import QuizAttemptOut
-
+from models.event import Event
 router = APIRouter(prefix="/student", tags=["student"])
 
 
@@ -118,74 +118,128 @@ def get_results(
     db: Session = Depends(get_db),
     current_user = Depends(require_role("student"))
 ):
-    
-
-    results = db.query(QuizAttempt).filter(
+    results = db.query(QuizAttempt, QuizTemplate).join(
+        QuizTemplate, QuizAttempt.quiz_template_id == QuizTemplate.id
+    ).filter(
         QuizAttempt.student_id == current_user.id,
         QuizAttempt.status == "submitted"
     ).all()
 
-    return results
+    output = []
+    for attempt, template in results:
+        attempt_dict = QuizAttemptOut.model_validate(attempt).model_dump()
+        attempt_dict["quiz_type"] = template.quiz_type
+        output.append(attempt_dict)
 
+    return output
 @router.get("/events/{event_id}/quizzes")
 def get_quizzes_for_event(
     event_id: str,
     db: Session = Depends(get_db),
-    current_user = Depends(require_role("student"))
+    current_user=Depends(require_role("student"))
 ):
-    
-
+    # Check whether student has RSVPed for this event
     rsvp = db.query(EventRSVP).filter(
         EventRSVP.event_id == event_id,
         EventRSVP.student_id == current_user.id
     ).first()
-    if not rsvp:
-        raise HTTPException(status_code=403, detail="You have not RSVPed for this event")
 
-    # Start from QuizTemplate so quizzes with no attempt yet are included
+    if not rsvp:
+        raise HTTPException(
+            status_code=403,
+            detail="You have not RSVPed for this event"
+        )
+
+    # Get all quiz templates assigned to this event
     quiz_templates = db.query(QuizTemplate).filter(
         QuizTemplate.event_id == event_id
-    ).all()
+    ).order_by(QuizTemplate.sequence_no).all()
 
-    # Fetch this student's attempts for these quizzes in one go
-    template_ids = [q.id for q in quiz_templates]
+    if not quiz_templates:
+        return []
+
+    # Get template IDs
+    template_ids = [quiz.id for quiz in quiz_templates]
+
+    # Get this student's attempts for these quizzes
     attempts = db.query(QuizAttempt).filter(
         QuizAttempt.quiz_template_id.in_(template_ids),
         QuizAttempt.student_id == current_user.id
     ).all()
-    attempts_by_template = {a.quiz_template_id: a for a in attempts}
+
+    # Map attempt by quiz template ID
+    attempts_by_template = {
+        attempt.quiz_template_id: attempt
+        for attempt in attempts
+    }
 
     result = []
+
     for quiz in quiz_templates:
         attempt = attempts_by_template.get(quiz.id)
 
+        # Quiz already submitted
         if attempt and attempt.status == "submitted":
-            # Already completed — show results, locked from retake
+
             if quiz.quiz_type in ["SCQ", "GWBS"]:
-                score_display = f"Score {attempt.total_score}"
-                interpretation = attempt.result_json.get("interpretation")
+                score_display = (
+                    f"Score {attempt.total_score}"
+                    if attempt.total_score is not None
+                    else None
+                )
+
+                interpretation = (
+                    attempt.result_json.get("interpretation")
+                    if attempt.result_json
+                    else None
+                )
+
             elif quiz.quiz_type == "TABBPS":
-                score_display = attempt.result_json.get("final_classification")
+                score_display = (
+                    attempt.result_json.get("final_classification")
+                    if attempt.result_json
+                    else None
+                )
+
                 interpretation = None
+
             elif quiz.quiz_type == "EI":
-                interps = attempt.result_json.get("competency_interpretations", {})
-                strengths = sum(1 for v in interps.values() if v == "Strength")
+                interps = (
+                    attempt.result_json.get(
+                        "competency_interpretations", {}
+                    )
+                    if attempt.result_json
+                    else {}
+                )
+
+                strengths = sum(
+                    1
+                    for value in interps.values()
+                    if value == "Strength"
+                )
+
                 score_display = f"{strengths} Strengths"
                 interpretation = None
+
             else:
                 score_display = None
                 interpretation = None
 
             result.append({
+                "quiz_template_id": str(quiz.id),
+                "attempt_id": str(attempt.id),
                 "quiz_type": quiz.quiz_type,
                 "title": quiz.title,
                 "status": "submitted",
                 "score_display": score_display,
                 "interpretation": interpretation
             })
+
+        # Quiz has not been submitted yet
         else:
-            # Not submitted yet — available to take (no timer logic yet)
             result.append({
+                "quiz_template_id": str(quiz.id),
+                "attempt_id": None,
                 "quiz_type": quiz.quiz_type,
                 "title": quiz.title,
                 "status": "available",
@@ -238,4 +292,63 @@ def get_event_overall_results(
         "event_title": event.title,
         "event_date": event.event_date,
         "quizzes": quiz_results
+    }
+
+@router.get("/scq-progress", response_model=ScqProgressOut)
+def get_scq_progress(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("student"))
+):
+    """
+    Returns SCQ history for the logged-in student.
+
+    X-axis  -> Event title
+    Y-axis  -> SCQ total score
+    """
+
+    attempts = (
+        db.query(QuizAttempt, QuizTemplate, Event)
+        .join(
+            QuizTemplate,
+            QuizAttempt.quiz_template_id == QuizTemplate.id
+        )
+        .join(
+            Event,
+            QuizTemplate.event_id == Event.id
+        )
+        .filter(
+            QuizAttempt.student_id == current_user.id,
+            QuizAttempt.status == "submitted",
+            QuizTemplate.quiz_type == "SCQ"
+        )
+        .order_by(Event.event_date.asc())
+        .all()
+    )
+
+    history = []
+
+    for attempt, template, event in attempts:
+        history.append({
+            "event_id": event.id,
+            "event_name": event.title,
+            "event_date": event.event_date,
+            "score": attempt.total_score
+        })
+
+    current_score = (
+        history[-1]["score"]
+        if history
+        else None
+    )
+
+    latest_event = (
+        history[-1]["event_date"]
+        if history
+        else None
+    )
+
+    return {
+        "current_score": current_score,
+        "latest_event": latest_event,
+        "history": history
     }

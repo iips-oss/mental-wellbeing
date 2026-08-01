@@ -13,8 +13,10 @@ const AuthService = {
     });
 
     const { access_token, role } = response.data;
+
     localStorage.setItem("token", access_token);
     localStorage.setItem("role", role);
+
     return response.data;
   },
 
@@ -27,7 +29,12 @@ const AuthService = {
     const response = await API.get("/auth/me");
     return response.data;
   },
-  
+
+  updateProfile: async (profileData) => {
+    const response = await API.patch("/auth/me", profileData);
+    return response.data;
+  },
+
   getAdminDashboard: async () => {
     const response = await API.get("/admin/dashboard");
     return response.data;
@@ -40,6 +47,47 @@ const AuthService = {
 
   createEvent: async (eventData) => {
     const response = await API.post("/admin/events", eventData);
+    return response.data;
+  },
+
+  getEventQuizzes: async (eventId) => {
+    const response = await API.get(`/admin/events/${eventId}/quizzes`);
+    return response.data;
+  },
+
+  // Returns every QuizTemplate across all events in one call, already joined
+  // with its event's title/date/time/status. Avoids the N+1 pattern of
+  // calling getEventQuizzes once per event.
+  getAllQuizTemplates: async () => {
+    const response = await API.get("/admin/quiz-templates");
+    return response.data;
+  },
+
+  getEventResults: async (eventId) => {
+    const response = await API.get(`/admin/events/${eventId}/results`);
+    return response.data;
+  },
+cancelEvent: async (eventId, reason) => {
+  const response = await API.patch(`/admin/events/${eventId}/cancel`, {
+    cancellation_reason: reason,
+  });
+  return response.data;
+},
+getNotifications: async () => {
+  const response = await API.get("/notifications/");
+  return response.data;
+},
+updateEvent: async (eventId, eventData) => {
+  const response = await API.patch(`/admin/events/${eventId}`, eventData);
+  return response.data;
+},
+completeEvent: async (eventId) => {
+  const response = await API.patch(`/admin/events/${eventId}/complete`);
+  return response.data;
+},
+  // EI has its own endpoint because results are competency-based
+  getEIResults: async (eventId) => {
+    const response = await API.get(`/admin/events/${eventId}/results/ei`);
     return response.data;
   }
 };

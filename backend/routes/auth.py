@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
-
+from sqlalchemy.exc import IntegrityError
 from database import get_db
 from models.student import Student
-from models.admin import Admin
+from models.admin import Admin, ProfileUpdate
 from schemas.student import StudentCreate, StudentOut
 from schemas.admin import AdminCreate, AdminOut
 from schemas.auth import TokenResponse
@@ -165,6 +165,54 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
 
 #return current user info to check who is logged in
 
+
+@router.patch("/me")
+def update_me(
+    data: ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if data.name is not None:
+        current_user.name = data.name
+
+    if data.email is not None and data.email != current_user.email:
+        existing_user, existing_role = find_user_by_email(db, data.email)
+        if existing_user is not None and not (
+            existing_role == current_user.role and existing_user.id == current_user.id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="This email is already in use by another account."
+            )
+        current_user.email = data.email
+
+    if data.department is not None:
+        if not hasattr(current_user, "department"):
+            raise HTTPException(status_code=400, detail="This account type does not support a department field")
+        current_user.department = data.department
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This email is already in use by another account."
+        )
+
+    db.refresh(current_user)
+
+    return {
+        "id": str(current_user.id),
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
+        "department": getattr(current_user, "department", None),
+        "course": getattr(current_user, "course", None),
+        "semester": getattr(current_user, "semester", None),
+        "session": getattr(current_user, "session", None),
+        "enrollment": getattr(current_user, "enrollment_no", None),
+    }
+
 @router.get("/me")
 def get_me(current_user=Depends(get_current_user)):
     return {
@@ -172,4 +220,10 @@ def get_me(current_user=Depends(get_current_user)):
         "name": current_user.name,
         "email": current_user.email,
         "role": current_user.role,
+        "department": getattr(current_user, "department", None),
+        "course": getattr(current_user, "course", None),
+        "semester": getattr(current_user, "semester", None),
+        "session": getattr(current_user, "session", None),
+        "enrollment": getattr(current_user, "enrollment_no", None),
+        "phone": getattr(current_user, "phone", None),   # NEW
     }

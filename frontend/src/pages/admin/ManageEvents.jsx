@@ -13,6 +13,9 @@ const ManageEvents = () => {
   const [showManageModal, setShowManageModal] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedPastEvent, setSelectedPastEvent] = useState(null);
+  const [pastEventQuizzes, setPastEventQuizzes] = useState([]);
+  const [loadingPastEventQuizzes, setLoadingPastEventQuizzes] = useState(false);
+  const [pastEventQuizzesError, setPastEventQuizzesError] = useState("");
 
   // Form states
   const [title, setTitle] = useState("");
@@ -29,74 +32,24 @@ const ManageEvents = () => {
   });
   const [otp, setOtp] = useState("4821");
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [formError, setFormError] = useState("");
-
+  const [completing, setCompleting] = useState(false);
   const tabs = ["Past Events", "Active Events"];
 
-  const fetchEvents = () => {
+  const fetchEvents = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const mockEvents = [
-        {
-          id: 1,
-          title: "Stress Management Workshop",
-          venue: "Seminar Hall A, Block 3",
-          event_date: "2026-07-25",
-          event_time: "14:00",
-          end_time: "16:00",
-          description: "A hands-on session exploring stress management techniques and psychological resilience strategies for college students.",
-          quizzes_count: "2/4",
-          attendees_count: 68,
-          status: "scheduled",
-          performance: "Average",
-          quizzes: { SCQ: true, GWBS: true, TABBPS: false, EI: false }
-        },
-        {
-          id: 2,
-          title: "Anxiety & Mental Health Talk",
-          venue: "Main Auditorium",
-          event_date: "2026-08-05",
-          event_time: "10:00",
-          end_time: "12:00",
-          description: "A talk about understanding anxiety.",
-          quizzes_count: "1/4",
-          attendees_count: 120,
-          status: "scheduled",
-          performance: "Pending",
-          quizzes: { SCQ: false, GWBS: false, TABBPS: false, EI: true }
-        },
-        {
-          id: 3,
-          title: "Stress Management Workshop",
-          venue: "Seminar Hall, IIPS DAVV",
-          event_date: "2026-06-12",
-          event_time: "14:00",
-          end_time: "16:00",
-          description: "Past workshop",
-          quizzes_count: "4/4",
-          attendees_count: 68,
-          status: "completed",
-          performance: "High",
-          quizzes: { SCQ: true, GWBS: true, TABBPS: true, EI: true }
-        },
-        {
-          id: 4,
-          title: "Type A/B Personality Seminar",
-          venue: "Room 101",
-          event_date: "2026-05-10",
-          event_time: "11:00",
-          end_time: "13:00",
-          description: "Seminar on personality types",
-          quizzes_count: "2/4",
-          attendees_count: 45,
-          status: "completed",
-          performance: "Average",
-          quizzes: { SCQ: false, GWBS: false, TABBPS: true, EI: false }
-        }
-      ];
-      setEvents(mockEvents);
+    setError("");
+    try {
+      const data = await AuthService.getAdminEvents();
+      setEvents(data);
+    } catch (err) {
+      console.error("Failed to load events:", err);
+      setError("Failed to load events. Please try again.");
+      setEvents([]);
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   useEffect(() => {
@@ -141,6 +94,22 @@ const ManageEvents = () => {
     setShowManageModal(true);
   };
 
+  const openPastEventDetails = async (event) => {
+    setSelectedPastEvent(event);
+    setPastEventQuizzes([]);
+    setPastEventQuizzesError("");
+    setLoadingPastEventQuizzes(true);
+    try {
+      const quizzes = await AuthService.getEventQuizzes(event.id);
+      setPastEventQuizzes(quizzes);
+    } catch (err) {
+      console.error("Failed to load quizzes for event:", err);
+      setPastEventQuizzesError("Failed to load quizzes for this event.");
+    } finally {
+      setLoadingPastEventQuizzes(false);
+    }
+  };
+
   const formatTime = (timeStr) => {
     if (!timeStr) return "";
     // Parse time like "14:00" to "2:00 PM"
@@ -151,42 +120,49 @@ const ManageEvents = () => {
     return date.toLocaleTimeString("en-US", { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
+  // Converts a "HH:MM" input value into the "HH:MM:00" format the backend expects.
+  // Leaves already-complete "HH:MM:SS" strings untouched.
+  const toBackendTime = (timeStr) => {
+    if (!timeStr) return timeStr;
+    return timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+  };
+
   const handleAddEvent = async (e) => {
     e.preventDefault();
     setFormError("");
     setSubmitting(true);
 
-    const quizTypes = Object.keys(selectedQuizzes).filter((k) => selectedQuizzes[k]);
+    // quiz_types in a fixed, predictable order; sequences generated to match [1, 2, ...]
+    const quizOrder = ["SCQ", "GWBS", "TABBPS", "EI"];
+    const quizTypes = quizOrder.filter((k) => selectedQuizzes[k]);
     if (quizTypes.length === 0) {
       setFormError("Please select at least one quiz type to assign to this event.");
       setSubmitting(false);
       return;
     }
+    const sequences = quizTypes.map((_, idx) => idx + 1);
+
+    const payload = {
+      title,
+      venue,
+      event_date: eventDate,
+      event_time: toBackendTime(eventTime),
+      description,
+      quiz_types: quizTypes,
+      sequences
+    };
 
     try {
-      setTimeout(() => {
-        const newEvent = {
-          id: Date.now(),
-          title: title,
-          venue: venue,
-          event_date: eventDate,
-          event_time: eventTime,
-          end_time: endTime,
-          description: description,
-          quizzes_count: `${quizTypes.length}/4`,
-          attendees_count: 0,
-          status: "scheduled",
-          performance: "Pending",
-          quizzes: selectedQuizzes
-        };
-        
-        setEvents(prev => [...prev, newEvent]);
-        setShowAddModal(false);
-        resetForm();
-        setSubmitting(false);
-      }, 500);
+      await AuthService.createEvent(payload);
+      setShowAddModal(false);
+      resetForm();
+      await fetchEvents();
     } catch (err) {
-      setFormError("Failed to create event.");
+      console.error("Failed to create event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to create event. Please try again."
+      );
+    } finally {
       setSubmitting(false);
     }
   };
@@ -203,34 +179,85 @@ const ManageEvents = () => {
       return;
     }
 
+    const payload = {
+      title,
+      venue,
+      event_date: eventDate,
+      event_time: toBackendTime(eventTime),
+      description,
+    };
+
     try {
-      setTimeout(() => {
-        setEvents(prev => prev.map(ev => {
-          if (ev.id === selectedEventId) {
-            return {
-              ...ev,
-              title,
-              venue,
-              event_date: eventDate,
-              event_time: eventTime,
-              end_time: endTime,
-              description,
-              quizzes_count: `${quizTypes.length}/4`,
-              quizzes: selectedQuizzes
-            };
-          }
-          return ev;
-        }));
-        setShowManageModal(false);
-        resetForm();
-        setSubmitting(false);
-      }, 500);
+      await AuthService.updateEvent(selectedEventId, payload);
+      setShowManageModal(false);
+      resetForm();
+      await fetchEvents();
     } catch (err) {
-      setFormError("Failed to update event.");
+      console.error("Failed to update event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to update event. Please try again."
+      );
+    } finally {
       setSubmitting(false);
     }
   };
 
+  const handleCancelEvent = async () => {
+    const reason = window.prompt(
+      "Please provide a reason for cancelling this event:",
+      "Cancelled by admin"
+    );
+
+    // user hit Cancel on the prompt itself
+    if (reason === null) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to cancel this event? This cannot be undone, and students will no longer be able to submit quizzes for it."
+    );
+
+    if (!confirmed) return;
+
+    setCancelling(true);
+    setFormError("");
+
+    try {
+      await AuthService.cancelEvent(selectedEventId, reason);
+      setShowManageModal(false);
+      resetForm();
+      await fetchEvents();
+    } catch (err) {
+      console.error("Failed to cancel event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to cancel event. Please try again."
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
+const handleCompleteEvent = async () => {
+  const confirmed = window.confirm(
+    "Mark this event as completed? It will move to Past Events and quiz results will become viewable."
+  );
+
+  if (!confirmed) return;
+
+  setCompleting(true);
+  setFormError("");
+
+  try {
+    await AuthService.completeEvent(selectedEventId);
+    setShowManageModal(false);
+    resetForm();
+    await fetchEvents();
+  } catch (err) {
+    console.error("Failed to complete event:", err);
+    setFormError(
+      err?.response?.data?.detail || "Failed to mark event as completed. Please try again."
+    );
+  } finally {
+    setCompleting(false);
+  }
+};
   const generateNewOtp = () => {
     const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
     setOtp(newOtp);
@@ -246,7 +273,7 @@ const ManageEvents = () => {
   }
 
   const todayStr = new Date().toISOString().split("T")[0];
-  
+
   const pastEvents = events.filter((e) => {
     return e.status === "completed" || e.status === "closed" || e.status === "cancelled" || e.event_date < todayStr;
   });
@@ -277,14 +304,20 @@ const ManageEvents = () => {
         </button>
       </div>
 
+      {error && (
+        <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm mb-6 border border-red-100 font-semibold font-sans">
+          {error}
+        </div>
+      )}
+
       <div className="flex gap-4 mb-8">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 text-sm font-semibold rounded-full transition-colors ${activeTab === tab
-                ? "bg-[#F3F2F2] border border-[#73D38F] text-[#386641]"
-                : "text-[#9DB1A3] hover:text-[#386641]"
+              ? "bg-[#F3F2F2] border border-[#73D38F] text-[#386641]"
+              : "text-[#9DB1A3] hover:text-[#386641]"
               }`}
           >
             {tab}
@@ -301,7 +334,7 @@ const ManageEvents = () => {
           <div className="flex flex-col h-full">
             <div className="grid grid-cols-12 gap-4 px-6 pb-4 border-b border-black/10 font-serif font-semibold text-black">
               <div className="col-span-4">Event</div>
-              <div className="col-span-2 text-center">Quizzes</div>
+              <div className="col-span-2 text-center">Faculty</div>
               <div className="col-span-2 text-center">Date</div>
               <div className="col-span-2 text-center">
                 {activeTab === "Past Events" ? "Attendees" : "Registrations"}
@@ -325,11 +358,10 @@ const ManageEvents = () => {
                       {event.venue}
                     </div>
                   </div>
-                  
-                  <div className="col-span-2 text-center text-[#3E4F45] text-sm">
-                    {event.quizzes_count}
-                  </div>
 
+                  <div className="col-span-2 text-center text-[#3E4F45] text-sm">
+                   {event.faculty_name}
+                  </div>
                   <div className="col-span-2 text-center">
                     <div className="text-[#3E4F45] text-sm mb-0.5">
                       {new Date(event.event_date).toLocaleDateString("en-GB", {
@@ -351,14 +383,14 @@ const ManageEvents = () => {
 
                   <div className="col-span-2 flex justify-end">
                     {activeTab === "Past Events" ? (
-                      <button 
-                        onClick={() => setSelectedPastEvent(event)}
+                      <button
+                        onClick={() => openPastEventDetails(event)}
                         className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
                       >
                         View Details
                       </button>
                     ) : (
-                      <button 
+                      <button
                         onClick={() => openManageModal(event)}
                         className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
                       >
@@ -401,10 +433,10 @@ const ManageEvents = () => {
             )}
 
             <form onSubmit={showManageModal ? handleUpdateEvent : handleAddEvent} className="space-y-6">
-              
+
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase">Basic Information</h4>
-                
+
                 <div>
                   <label className="block text-sm font-semibold text-black mb-1.5 font-sans">Event title <span className="text-red-500">*</span></label>
                   <input
@@ -484,11 +516,10 @@ const ManageEvents = () => {
                 <div className="grid grid-cols-2 gap-3">
                   {/* SCQ */}
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${
-                      selectedQuizzes["SCQ"]
+                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${selectedQuizzes["SCQ"]
                         ? "bg-[#E5E5E5] border-[#2F3C36]"
                         : "bg-white hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -496,11 +527,10 @@ const ManageEvents = () => {
                       onChange={() => handleCheckboxChange("SCQ")}
                       className="hidden"
                     />
-                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${
-                      selectedQuizzes["SCQ"]
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${selectedQuizzes["SCQ"]
                         ? "bg-[#2E7D4F] border-[#2E7D4F] text-white"
                         : "border-gray-300 bg-white"
-                    }`}>
+                      }`}>
                       {selectedQuizzes["SCQ"] && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
@@ -508,14 +538,13 @@ const ManageEvents = () => {
                       <div className="text-xs text-[#9DB1A3] mt-0.5 font-medium">Self Concept Questionnaire — 48 questions, 6 dimensions</div>
                     </div>
                   </label>
-                  
+
                   {/* GWBS */}
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${
-                      selectedQuizzes["GWBS"]
+                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${selectedQuizzes["GWBS"]
                         ? "bg-[#E5E5E5] border-[#2F3C36]"
                         : "bg-white hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -523,11 +552,10 @@ const ManageEvents = () => {
                       onChange={() => handleCheckboxChange("GWBS")}
                       className="hidden"
                     />
-                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${
-                      selectedQuizzes["GWBS"]
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${selectedQuizzes["GWBS"]
                         ? "bg-[#2E7D4F] border-[#2E7D4F] text-white"
                         : "border-gray-300 bg-white"
-                    }`}>
+                      }`}>
                       {selectedQuizzes["GWBS"] && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
@@ -538,11 +566,10 @@ const ManageEvents = () => {
 
                   {/* TABBPS */}
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${
-                      selectedQuizzes["TABBPS"]
+                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${selectedQuizzes["TABBPS"]
                         ? "bg-[#E5E5E5] border-[#2F3C36]"
                         : "bg-white hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -550,11 +577,10 @@ const ManageEvents = () => {
                       onChange={() => handleCheckboxChange("TABBPS")}
                       className="hidden"
                     />
-                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${
-                      selectedQuizzes["TABBPS"]
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${selectedQuizzes["TABBPS"]
                         ? "bg-[#2E7D4F] border-[#2E7D4F] text-white"
                         : "border-gray-300 bg-white"
-                    }`}>
+                      }`}>
                       {selectedQuizzes["TABBPS"] && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
@@ -565,11 +591,10 @@ const ManageEvents = () => {
 
                   {/* EI */}
                   <label
-                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${
-                      selectedQuizzes["EI"]
+                    className={`flex items-start gap-3 p-4 rounded-xl border border-[#2F3C36]/20 cursor-pointer select-none transition-colors ${selectedQuizzes["EI"]
                         ? "bg-[#E5E5E5] border-[#2F3C36]"
                         : "bg-white hover:bg-gray-50"
-                    }`}
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -577,11 +602,10 @@ const ManageEvents = () => {
                       onChange={() => handleCheckboxChange("EI")}
                       className="hidden"
                     />
-                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${
-                      selectedQuizzes["EI"]
+                    <div className={`mt-0.5 w-4 h-4 shrink-0 rounded-sm flex items-center justify-center border transition-all ${selectedQuizzes["EI"]
                         ? "bg-[#2E7D4F] border-[#2E7D4F] text-white"
                         : "border-gray-300 bg-white"
-                    }`}>
+                      }`}>
                       {selectedQuizzes["EI"] && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
                     <div>
@@ -607,8 +631,8 @@ const ManageEvents = () => {
                         readOnly
                         className="w-32 border border-[#2F3C36]/20 rounded-xl px-4 py-3 bg-white text-center font-bold tracking-[0.5em] text-lg text-black font-sans focus:outline-none"
                       />
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={generateNewOtp}
                         className="border border-[#2F3C36]/20 bg-white px-4 py-3 rounded-xl text-sm font-semibold text-black hover:bg-gray-50 transition-colors cursor-pointer"
                       >
@@ -621,17 +645,29 @@ const ManageEvents = () => {
               )}
 
               <div className="flex justify-between items-center pt-6 border-t border-black/10">
-                {showManageModal ? (
-                  <button
-                    type="button"
-                    className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2"
-                  >
-                    <X className="w-4 h-4" /> Cancel event
-                  </button>
+              {showManageModal ? (
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCancelEvent}
+                      disabled={cancelling || completing}
+                      className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <X className="w-4 h-4" /> {cancelling ? "Cancelling..." : "Cancel event"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCompleteEvent}
+                      disabled={cancelling || completing}
+                      className="text-[#2E7D4F] font-semibold text-sm hover:bg-green-50 px-4 py-2 rounded-lg border border-transparent hover:border-green-100 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Check className="w-4 h-4" /> {completing ? "Completing..." : "Mark as completed"}
+                    </button>
+                  </div>
                 ) : (
                   <div></div>
                 )}
-                
+
                 <div className="flex gap-3">
                   <button
                     type="button"
@@ -680,17 +716,17 @@ const ManageEvents = () => {
                   <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Event</h4>
                   <div className="text-[#3A8458] font-bold text-lg">{selectedPastEvent.title}</div>
                   <div className="text-[#3E4F45] text-sm mt-1 flex items-center gap-1">
-                     <MapPin className="w-3.5 h-3.5 shrink-0" /> {selectedPastEvent.venue}
+                    <MapPin className="w-3.5 h-3.5 shrink-0" /> {selectedPastEvent.venue}
                   </div>
                 </div>
-                
+
                 <div>
                   <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Date & Time</h4>
                   <div className="text-[#3E4F45] font-medium text-sm">
                     {new Date(selectedPastEvent.event_date).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric"
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric"
                     })} • {formatTime(selectedPastEvent.event_time)}
                   </div>
                 </div>
@@ -704,28 +740,48 @@ const ManageEvents = () => {
               <div className="pt-4 border-t border-black/10">
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-3">Quizzes Taken</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  {Object.entries(selectedPastEvent.quizzes).filter(([_, isSelected]) => isSelected).map(([quizName]) => {
-                    let quizId = 1;
-                    let fullName = quizName;
-                    if (quizName === 'SCQ') { quizId = 1; fullName = 'Self Concept Questionnaire (SCQ)'; }
-                    else if (quizName === 'GWBS') { quizId = 2; fullName = 'General Well-Being Scale (GWBS)'; }
-                    else if (quizName === 'TABBPS') { quizId = 3; fullName = 'Type A/B Behaviour Pattern (TABBPS)'; }
-                    else if (quizName === 'EI') { quizId = 4; fullName = 'Emotional Intelligence (EI)'; }
+                  {loadingPastEventQuizzes ? (
+                    <div className="col-span-2 text-sm text-[#9DB1A3] font-medium">
+                      Loading quizzes...
+                    </div>
+                  ) : pastEventQuizzesError ? (
+                    <div className="col-span-2 text-sm text-red-600 font-medium">
+                      {pastEventQuizzesError}
+                    </div>
+                  ) : pastEventQuizzes.length === 0 ? (
+                    <div className="col-span-2 text-sm text-[#9DB1A3] font-medium">
+                      No quiz data available for this event.
+                    </div>
+                  ) : (
+                    pastEventQuizzes.map((quiz) => {
+                      const quizNameMap = {
+                        SCQ: "Self Concept Questionnaire (SCQ)",
+                        GWBS: "General Well-Being Scale (GWBS)",
+                        TABBPS: "Type A/B Behaviour Pattern (TABBPS)",
+                        EI: "Emotional Intelligence (EI)"
+                      };
+                      const fullName = quizNameMap[quiz.quiz_type] || quiz.title || quiz.quiz_type;
 
-                    return (
-                      <div 
-                        key={quizName}
-                        onClick={() => navigate(`/admin/quizzes/${quizId}/results`)}
-                        className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] hover:shadow-md transition-all group"
-                      >
-                        <div className="text-[#3A8458] font-bold font-sans text-lg group-hover:text-[#2E7D4F] transition-colors">{quizName}</div>
-                        <div className="text-xs text-[#9DB1A3] mt-1 font-medium">{fullName}</div>
-                        <div className="mt-3 text-xs font-bold text-[#2E7D4F] uppercase tracking-wider flex items-center gap-1">
-                          View Results &rarr;
+                      return (
+                        <div
+                          key={quiz.id}
+                          onClick={() => {
+                            setSelectedPastEvent(null);
+                            navigate(
+                              `/admin/quizzes/${quiz.id}/results?eventId=${selectedPastEvent.id}&quizType=${quiz.quiz_type}`
+                            );
+                          }}
+                          className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] hover:shadow-md transition-all group"
+                        >
+                          <div className="text-[#3A8458] font-bold font-sans text-lg group-hover:text-[#2E7D4F] transition-colors">{quiz.quiz_type}</div>
+                          <div className="text-xs text-[#9DB1A3] mt-1 font-medium">{fullName}</div>
+                          <div className="mt-3 text-xs font-bold text-[#2E7D4F] uppercase tracking-wider flex items-center gap-1">
+                            View Results &rarr;
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>

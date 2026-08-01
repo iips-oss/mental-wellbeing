@@ -1,3 +1,5 @@
+from typing import Optional
+from pydantic import BaseModel
 from sqlalchemy import Column, String, TIMESTAMP
 from datetime import datetime, timezone
 import uuid
@@ -14,3 +16,8 @@ class Admin(Base):
     department = Column(String)
     created_at = Column(TIMESTAMP, default=lambda: datetime.now(timezone.utc))
     events = relationship("Event", back_populates="admin")
+
+class ProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    department: Optional[str] = None

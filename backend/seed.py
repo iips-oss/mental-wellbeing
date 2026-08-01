@@ -16,6 +16,7 @@ from models.event import Event, EventReport, EventRSVP
 from models.quiz import OptionSet, QuizOption, QuizTemplate, QuizQuestion, QuizResponse, QuizAttempt, AreaScore
 from services.auth import hash_password
 from services.quiz_scoring import compute_quiz_result, SCQ_DIMENSIONS, GWBS_DIMENSIONS, TABBPS_FORM_A_FACTORS, TABBPS_FORM_B_FACTORS, EI_COMPETENCIES
+from services.quiz_service import populate_quiz_questions
 
 def get_scq_dim(q_no):
     for dim, questions in SCQ_DIMENSIONS.items():
@@ -160,64 +161,10 @@ def seed_db():
         db.add_all([t1_scq, t1_gwbs, t1_tab, t1_ei, t2_ei, t2_scq, t3_gwbs, t4_scq, t4_gwbs])
         db.flush()
         
-        print("Seeding Quiz Questions...")
-        # A quick helper function to add questions for templates
-        def add_questions_for_template(template, num_questions, type_str):
-            for i in range(1, num_questions + 1):
-                if type_str == "SCQ":
-                    area_code = get_scq_dim(i)
-                    q = QuizQuestion(
-                        id=str(uuid.uuid4()), quiz_template_id=template.id, option_set_id=opt_set.id,
-                        question_no=i, question_text=f"SCQ question {i}: rate your agreement on self perception.",
-                        area_code=area_code, form=None
-                    )
-                elif type_str == "GWBS":
-                    area_code = get_gwbs_dim(i)
-                    q = QuizQuestion(
-                        id=str(uuid.uuid4()), quiz_template_id=template.id, option_set_id=opt_set.id,
-                        question_no=i, question_text=f"GWBS question {i}: rate your wellbeing during the past week.",
-                        area_code=area_code, form=None
-                    )
-                elif type_str == "TABBPS":
-                    # TABBPS questions: 17 for Form A, 16 for Form B
-                    # Let's seed 17 for form A, and 16 for form B
-                    pass
-                elif type_str == "EI":
-                    area_code = get_ei_comp(i)
-                    q = QuizQuestion(
-                        id=str(uuid.uuid4()), quiz_template_id=template.id, option_set_id=opt_set.id,
-                        question_no=i, question_text=f"EI question {i}: rate your emotional intelligence competencies.",
-                        area_code=area_code, form=None
-                    )
-                db.add(q)
-        
-        # Add questions for SCQ, GWBS, EI templates
-        add_questions_for_template(t1_scq, 48, "SCQ")
-        add_questions_for_template(t1_gwbs, 55, "GWBS")
-        add_questions_for_template(t1_ei, 50, "EI")
-        add_questions_for_template(t2_scq, 48, "SCQ")
-        add_questions_for_template(t2_ei, 50, "EI")
-        add_questions_for_template(t3_gwbs, 55, "GWBS")
-        add_questions_for_template(t4_scq, 48, "SCQ")
-        add_questions_for_template(t4_gwbs, 55, "GWBS")
-        
-        # Add TABBPS questions (Form A and Form B)
-        # Form A questions (17)
-        for i in range(1, 18):
-            q = QuizQuestion(
-                id=str(uuid.uuid4()), quiz_template_id=t1_tab.id, option_set_id=opt_set.id,
-                question_no=i, question_text=f"TABBPS Form A question {i}",
-                area_code=get_tabbps_factor("A", i), form="A"
-            )
-            db.add(q)
-        # Form B questions (16)
-        for i in range(1, 17):
-            q = QuizQuestion(
-                id=str(uuid.uuid4()), quiz_template_id=t1_tab.id, option_set_id=opt_set.id,
-                question_no=i, question_text=f"TABBPS Form B question {i}",
-                area_code=get_tabbps_factor("B", i), form="B"
-            )
-            db.add(q)
+        print("Seeding Quiz Questions with real questions...")
+        all_templates = [t1_scq, t1_gwbs, t1_tab, t1_ei, t2_ei, t2_scq, t3_gwbs, t4_scq, t4_gwbs]
+        for t in all_templates:
+            populate_quiz_questions(db, t)
             
         db.flush()
         
@@ -392,5 +339,45 @@ def seed_db():
     finally:
         db.close()
 
+def seed_questions_only(db: Session):
+    from sqlalchemy import text
+    print("Updating questions and option sets without deleting student attempts or events...")
+    templates = db.query(QuizTemplate).all()
+    if not templates:
+        print("No quiz templates found in database.")
+        return
+
+    # Delete old questions and option sets safely
+    db.execute(text("DELETE FROM quiz_responses"))
+    db.execute(text("DELETE FROM quiz_questions"))
+    db.execute(text("DELETE FROM quiz_options"))
+    db.execute(text("DELETE FROM option_sets"))
+    db.commit()
+
+    for template in templates:
+        print(f"Populating real questions for template: {template.title} ({template.quiz_type})")
+        populate_quiz_questions(db, template)
+
+    db.commit()
+    print("Quiz questions and option sets successfully updated without affecting student attempts!")
+
 if __name__ == "__main__":
-    seed_db()
+    args = sys.argv[1:]
+    if "--reset-all" in args or "--force-reset" in args:
+        print("Explicit --reset-all passed. Performing full database re-seed...")
+        seed_db()
+    else:
+        db_check = SessionLocal()
+        try:
+            student_count = db_check.query(Student).count()
+            attempt_count = db_check.query(QuizAttempt).count()
+            if student_count > 0 or attempt_count > 0:
+                print(f"Existing database content detected ({student_count} students, {attempt_count} quiz attempts).")
+                print("Updating questions & option sets ONLY to protect existing student attempts and data.")
+                print("(Tip: Run 'python seed.py --reset-all' if you explicitly want to drop all tables and re-seed from scratch.)")
+                seed_questions_only(db_check)
+            else:
+                db_check.close()
+                seed_db()
+        finally:
+            db_check.close()

@@ -1,52 +1,108 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
+import AuthService from "../../services/auth";
+
+const QUIZ_NAME_MAP = {
+  SCQ: "Self Concept Questionnaire (SCQ)",
+  GWBS: "General Well-Being Scale (GWBS)",
+  TABBPS: "Type A/B Behaviour Pattern (TABBPS)",
+  EI: "Emotional Intelligence (EI)"
+};
+
+// Fixed metadata about each instrument itself (question count, dimensions) —
+// this is a property of the quiz design, not something that comes from the DB.
+const QUIZ_TYPE_META = {
+  SCQ: { title: "Self Concept (SCQ)", subtitle: "48 Questions · 6 Dimensions" },
+  GWBS: { title: "General Well-Being (GWBS)", subtitle: "55 Questions · 4 Dimensions" },
+  TABBPS: { title: "Type A/B Pattern (TABBPS)", subtitle: "33 Questions · Form A+B" },
+  EI: { title: "Emotional Intelligence (EI)", subtitle: "50 Questions · 5 Competencies" }
+};
 
 const ManageQuizzes = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Upcoming Quizzes");
   const [selectedQuiz, setSelectedQuiz] = useState(null);
 
+  const [quizzes, setQuizzes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const tabs = ["Upcoming Quizzes", "Past Quizzes", "Quiz Types"];
 
-  const quizzes = [
-    { id: 1, type: "SCQ", event: "Stress Management Workshop", date: "1 June", description: "Self Concept Questionnaire. Assesses various dimensions of self-concept including physical, social, temperamental, educational, moral, and intellectual self." },
-    { id: 2, type: "GWBS", event: "Stress Management Workshop", date: "1 June", description: "General Well-Being Scale. Measures subjective feelings of psychological well-being and distress." },
-    { id: 3, type: "TABBPS", event: "Stress Management Workshop", date: "1 June", description: "Type A/B Behaviour Pattern Scale. Helps identify personality traits and susceptibility to stress." },
-    { id: 4, type: "EI", event: "Stress Management Workshop", date: "1 June", description: "Emotional Intelligence Scale. Evaluates self-awareness, managing emotions, motivating oneself, empathy, and social skill." },
-    { id: 5, type: "GWBS", event: "Stress Management Workshop", date: "30 May", description: "General Well-Being Scale. Measures subjective feelings of psychological well-being and distress." },
-  ];
+  useEffect(() => {
+    const fetchAllQuizzes = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await AuthService.getAllQuizTemplates();
+        setQuizzes(data);
+      } catch (err) {
+        console.error("Failed to load quizzes:", err);
+        setError("Failed to load quizzes. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const quizTypes = [
-    {
-      id: 1,
-      title: "Self Concept (SCQ)",
-      subtitle: "48 Questions · 6 Dimensions",
-      frequency: "3 Events",
-      dateLastTaken: "12 Jul 2026 • 2:00 PM",
-    },
-    {
-      id: 2,
-      title: "General Well-Being (GWBS)",
-      subtitle: "55 Questions · 4 Dimensions",
-      frequency: "2 Events",
-      dateLastTaken: "12 Jul 2026 • 2:00 PM",
-    },
-    {
-      id: 3,
-      title: "Type A/B Pattern (TABBPS)",
-      subtitle: "33 Questions · Form A+B",
-      frequency: "1 Event",
-      dateLastTaken: "12 Jul 2026 • 2:00 PM",
-    },
-    {
-      id: 4,
-      title: "Emotional Intelligence (EI)",
-      subtitle: "50 Questions · 5 Competencies",
-      frequency: "3 Events",
-      dateLastTaken: "12 Jul 2026 • 2:00 PM",
-    },
-  ];
+    fetchAllQuizzes();
+  }, []);
+
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const isPast = (q) =>
+    q.eventStatus === "completed" ||
+    q.eventStatus === "closed" ||
+    q.eventStatus === "cancelled" ||
+    q.eventDate < todayStr;
+
+  const upcomingQuizzes = quizzes.filter((q) => !isPast(q));
+  const pastQuizzes = quizzes.filter((q) => isPast(q));
+
+  const displayedQuizzes = activeTab === "Past Quizzes" ? pastQuizzes : upcomingQuizzes;
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "—";
+    try {
+      return new Date(dateStr).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatTime = (timeStr) => {
+    if (!timeStr) return "";
+    const [h, m] = timeStr.split(":");
+    const date = new Date();
+    date.setHours(parseInt(h, 10));
+    date.setMinutes(parseInt(m, 10));
+    return date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  };
+
+  // Group the already-fetched quiz records by quiz_type to build the
+  // "Quiz Types" tab summary — no extra backend call needed.
+  const quizTypeSummaries = Object.keys(QUIZ_TYPE_META).map((quizType) => {
+    const matches = quizzes.filter((q) => q.quiz_type === quizType);
+    const eventCount = matches.length;
+
+    let lastTaken = null;
+    for (const q of matches) {
+      if (!lastTaken || q.eventDate > lastTaken.eventDate) {
+        lastTaken = q;
+      }
+    }
+
+    return {
+      quizType,
+      ...QUIZ_TYPE_META[quizType],
+      eventCount,
+      lastTaken
+    };
+  });
 
   return (
     <div className="w-full h-full flex flex-col font-sans relative">
@@ -84,38 +140,53 @@ const ManageQuizzes = () => {
               <div className="text-right pr-6"></div>
             </div>
 
-            <div className="flex flex-col gap-4 mt-6 overflow-y-auto pr-2 pb-10">
-              {quizzes.map((quiz) => (
-                <div
-                  key={quiz.id}
-                  className="grid grid-cols-4 gap-4 items-center bg-[#E5E5E5] border border-[#2F3C36] rounded-xl px-6 py-4"
-                >
-                  <div className="text-[#3A8458] font-sans font-medium text-lg">
-                    {quiz.type}
+            {loading ? (
+              <div className="flex flex-col items-center justify-center flex-1 gap-4 py-16">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#386641]"></div>
+                <p className="text-gray-500 font-medium">Loading quizzes...</p>
+              </div>
+            ) : error ? (
+              <div className="text-center py-16 text-red-600 font-semibold">{error}</div>
+            ) : displayedQuizzes.length === 0 ? (
+              <div className="text-center py-16 text-gray-400 font-sans font-semibold">
+                No {activeTab.toLowerCase()} found.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4 mt-6 overflow-y-auto pr-2 pb-10">
+                {displayedQuizzes.map((quiz) => (
+                  <div
+                    key={quiz.quizTemplateId}
+                    className="grid grid-cols-4 gap-4 items-center bg-[#E5E5E5] border border-[#2F3C36] rounded-xl px-6 py-4"
+                  >
+                    <div className="text-[#3A8458] font-sans font-medium text-lg">
+                      {quiz.quiz_type}
+                    </div>
+                    <div className="text-center text-[#3E4F45] text-sm">
+                      {quiz.eventTitle}
+                    </div>
+                    <div className="text-center text-[#3E4F45] text-sm">
+                      {formatDate(quiz.eventDate)}
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        onClick={() => {
+                          if (activeTab === "Upcoming Quizzes") {
+                            setSelectedQuiz(quiz);
+                          } else {
+                            navigate(
+                              `/admin/quizzes/${quiz.quizTemplateId}/results?eventId=${quiz.eventId}&quizType=${quiz.quiz_type}`
+                            );
+                          }
+                        }}
+                        className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
+                      >
+                        {activeTab === "Upcoming Quizzes" ? "View Details" : "View Results"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-center text-[#3E4F45] text-sm">
-                    {quiz.event}
-                  </div>
-                  <div className="text-center text-[#3E4F45] text-sm">
-                    {quiz.date}
-                  </div>
-                  <div className="flex justify-end">
-                    <button
-                      onClick={() => {
-                        if (activeTab === "Upcoming Quizzes") {
-                          setSelectedQuiz(quiz);
-                        } else {
-                          navigate(`/admin/quizzes/${quiz.id}/results`);
-                        }
-                      }}
-                      className="bg-[#2E7D4F] hover:bg-[#256641] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors cursor-pointer"
-                    >
-                      {activeTab === "Upcoming Quizzes" ? "View Details" : "View Results"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -127,29 +198,40 @@ const ManageQuizzes = () => {
               <div className="text-right">Date Last Taken</div>
             </div>
 
-            <div className="flex flex-col gap-4 mt-6 overflow-y-auto pr-2 pb-10">
-              {quizTypes.map((qt) => (
-                <div
-                  key={qt.id}
-                  className="grid grid-cols-3 gap-4 items-center bg-[#E5E5E5] border border-[#2F3C36] rounded-xl px-6 py-4"
-                >
-                  <div>
-                    <div className="text-[#3A8458] font-sans font-medium text-lg">
-                      {qt.title}
+            {loading ? (
+              <div className="flex flex-col items-center justify-center flex-1 gap-4 py-16">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#386641]"></div>
+                <p className="text-gray-500 font-medium">Loading quiz types...</p>
+              </div>
+            ) : error ? (
+              <div className="text-center py-16 text-red-600 font-semibold">{error}</div>
+            ) : (
+              <div className="flex flex-col gap-4 mt-6 overflow-y-auto pr-2 pb-10">
+                {quizTypeSummaries.map((qt) => (
+                  <div
+                    key={qt.quizType}
+                    className="grid grid-cols-3 gap-4 items-center bg-[#E5E5E5] border border-[#2F3C36] rounded-xl px-6 py-4"
+                  >
+                    <div>
+                      <div className="text-[#3A8458] font-sans font-medium text-lg">
+                        {qt.title}
+                      </div>
+                      <div className="text-[#3E4F45] text-xs mt-1">
+                        {qt.subtitle}
+                      </div>
                     </div>
-                    <div className="text-[#3E4F45] text-xs mt-1">
-                      {qt.subtitle}
+                    <div className="text-center text-[#3E4F45] text-sm">
+                      {qt.eventCount} {qt.eventCount === 1 ? "Event" : "Events"}
+                    </div>
+                    <div className="text-right text-[#3E4F45] text-sm pr-4">
+                      {qt.lastTaken
+                        ? `${formatDate(qt.lastTaken.eventDate)} • ${formatTime(qt.lastTaken.eventTime)}`
+                        : "—"}
                     </div>
                   </div>
-                  <div className="text-center text-[#3E4F45] text-sm">
-                    {qt.frequency}
-                  </div>
-                  <div className="text-right text-[#3E4F45] text-sm pr-4">
-                    {qt.dateLastTaken}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -176,23 +258,23 @@ const ManageQuizzes = () => {
             <div className="space-y-4">
               <div>
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Quiz Type</h4>
-                <div className="text-[#3A8458] font-bold text-lg">{selectedQuiz.type}</div>
+                <div className="text-[#3A8458] font-bold text-lg">{selectedQuiz.quiz_type}</div>
               </div>
-              
+
               <div>
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Event</h4>
-                <div className="text-[#3E4F45] font-medium">{selectedQuiz.event}</div>
+                <div className="text-[#3E4F45] font-medium">{selectedQuiz.eventTitle}</div>
               </div>
 
               <div>
                 <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Scheduled Date</h4>
-                <div className="text-[#3E4F45] font-medium">{selectedQuiz.date}</div>
+                <div className="text-[#3E4F45] font-medium">{formatDate(selectedQuiz.eventDate)}</div>
               </div>
 
               <div>
-                <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Description</h4>
+                <h4 className="text-xs font-bold text-[#9DB1A3] tracking-wider uppercase mb-1">Title</h4>
                 <div className="text-[#3E4F45] text-sm leading-relaxed">
-                  {selectedQuiz.description}
+                  {selectedQuiz.title || "—"}
                 </div>
               </div>
             </div>

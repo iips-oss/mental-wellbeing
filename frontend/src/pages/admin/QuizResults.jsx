@@ -1,129 +1,252 @@
-import React, { useState, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { ChevronLeft, ChevronDown } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ChevronLeft } from "lucide-react";
+import AuthService from "../../services/auth";
+
+const QUIZ_NAME_MAP = {
+  SCQ: "Self Concept",
+  GWBS: "General Well-Being",
+  TABBPS: "Type A/B Personality",
+  EI: "Emotional Intelligence"
+};
+
+const EI_COMPETENCIES = [
+  { key: "Self_Awareness", label: "Self Awareness" },
+  { key: "Managing_Emotions", label: "Managing Emotions" },
+  { key: "Motivating_Oneself", label: "Motivating Oneself" },
+  { key: "Empathy", label: "Empathy" },
+  { key: "Social_Skill", label: "Social Skill" }
+];
 
 const QuizResults = () => {
   const navigate = useNavigate();
-  const { id } = useParams();
+  const { id: quizTemplateId } = useParams();
 
-  let quizType = "SCQ";
-  let quizName = "Self Concept";
-  if (id === "2") {
-    quizType = "GWBS";
-    quizName = "General Well-Being";
-  } else if (id === "3") {
-    quizType = "TABBPS";
-    quizName = "Type A/B Personality";
-  } else if (id === "4") {
-    quizType = "EI";
-    quizName = "Emotional Intelligence";
-  }
+  const [searchParams] = useSearchParams();
+  const eventId = searchParams.get("eventId");
+  const quizType = searchParams.get("quizType") || "SCQ";
 
-  const eiCompetencies = ["Overall", "Self Awareness", "Managing Emotions", "Motivating Oneself", "Empathy", "Social Skill"];
+  const quizName = QUIZ_NAME_MAP[quizType] || quizType;
 
-  const [selectedCompetency, setSelectedCompetency] = useState("Overall");
-  const [showCompetencyDropdown, setShowCompetencyDropdown] = useState(false);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedCompetency, setSelectedCompetency] =
+    useState("Self_Awareness");
 
-  const [selectedCourse, setSelectedCourse] = useState("All");
-  const [selectedYear, setSelectedYear] = useState("All");
-
-  const [students, setStudents] = useState(() => {
-    // Generate different base students based on quiz type to match screenshots somewhat, or just use one mixed list
-    const baseStudents = [
-      { name: "Mamta Banerjee", rollNo: "IT-2k21-86", course: "BCA", year: "1st Year", scoreA: 85, scoreB: 45, score: 13 },
-      { name: "Smriti Irani", rollNo: "IT-2k21-87", course: "MCA", year: "2nd Year", scoreA: 40, scoreB: 90, score: 25 },
-      { name: "Indira Gandhi", rollNo: "IT-2k21-88", course: "BTech", year: "3rd Year", scoreA: 65, scoreB: 68, score: 42 },
-      { name: "Droupadi Murmu", rollNo: "IT-2k21-89", course: "BCA", year: "1st Year", scoreA: 70, scoreB: 72, score: 46 },
-      { name: "Shivraj S. Chouhan", rollNo: "IT-2k21-90", course: "MCA", year: "2nd Year", scoreA: 50, scoreB: 50, score: 27 },
-      { name: "Nirmala Sitharaman", rollNo: "IT-2k21-91", course: "BTech", year: "4th Year", scoreA: 35, scoreB: 95, score: 17 },
-      { name: "Nitin Gadkari", rollNo: "IT-2k21-92", course: "BCA", year: "3rd Year", scoreA: 92, scoreB: 38, score: 38 },
-      { name: "Raju Singh", rollNo: "IT-2k21-86", course: "BCA", year: "2nd Year", scoreA: 80, scoreB: 55, score: 67 },
-      { name: "Jay Shah", rollNo: "IT-2k21-86", course: "BCA", year: "3rd Year", scoreA: 51, scoreB: 81, score: 125 },
-      { name: "Amit Shah", rollNo: "IT-2k21-86", course: "BTech", year: "1st Year", scoreA: 52, scoreB: 57, score: 180 },
-      { name: "Narendra Modi", rollNo: "IT-2k21-86", course: "MCA", year: "2nd Year", scoreA: 52, scoreB: 54, score: 221 },
-      { name: "Mohan Yadav", rollNo: "IT-2k21-86", course: "BCA", year: "1st Year", scoreA: 41, scoreB: 39, score: 100 },
-      { name: "Yogi Adityanath", rollNo: "IT-2k21-86", course: "BTech", year: "4th Year", scoreA: 51, scoreB: 81, score: 40 },
-      { name: "Rahul Gandhi", rollNo: "IT-2k21-86", course: "BCA", year: "3rd Year", scoreA: 80, scoreB: 55, score: 213 },
-    ];
-
-    return baseStudents.map(s => {
-      let interpretation = "";
-      if (quizType === "TABBPS") {
-        if (s.scoreA > 75) interpretation = "Type A";
-        else if (s.scoreB > 75) interpretation = "Type B";
-        else if (s.scoreA >= 50 && s.scoreB >= 50) interpretation = "Balanced";
-        else interpretation = "No strong pattern";
-      } else if (quizType === "GWBS") {
-        if (s.score > 40) interpretation = "High";
-        else if (s.score > 20) interpretation = "Average";
-        else interpretation = "Low";
-      } else if (quizType === "SCQ") {
-        if (s.score > 200) interpretation = "High";
-        else if (s.score > 150) interpretation = "Above Average";
-        else if (s.score > 90) interpretation = "Average";
-        else if (s.score > 50) interpretation = "Below Average";
-        else interpretation = "Low";
-      } else { // EI
-        if (s.score > 35) interpretation = "Strength";
-        else if (s.score > 20) interpretation = "Needs Attention";
-        else interpretation = "Development Priority";
+  useEffect(() => {
+    const fetchResults = async () => {
+      if (!eventId) {
+        setError(
+          "Missing event reference — please open this page from an event's details."
+        );
+        setLoading(false);
+        return;
       }
-      return { ...s, interpretation };
-    });
-  });
 
-  const getInterpretationBadge = (level) => {
-    switch (level) {
-      case "Development Priority":
-      case "Low":
-        return "bg-[#F87171] text-black border-[#F87171]"; // Red
-      case "Needs Attention":
-      case "Average":
-        return "bg-[#FDE047] text-black border-[#FDE047]"; // Yellow
-      case "Strength":
-      case "Above Average":
-      case "Balanced":
-        return "bg-[#86E8A8] text-black border-[#86E8A8]"; // Light Green
-      case "High":
-        return "bg-[#3A8458] text-black border-[#3A8458]"; // Dark Green
-      case "Type A":
-        return "bg-[#F9A8D4] text-black border-[#F9A8D4]"; // Pink
-      case "Type B":
-        return "bg-[#93C5FD] text-black border-[#93C5FD]"; // Light Blue
-      case "No strong pattern":
-        return "bg-[#D6C1B9] text-black border-[#D6C1B9]"; // Brown/Grey
-      case "Below Average":
-        return "bg-[#F3D8C7] text-black border-[#F3D8C7]"; // Peach/Tan
-      default:
-        return "bg-gray-200 text-black border-gray-200";
+      setLoading(true);
+      setError("");
+
+      try {
+        if (quizType === "EI") {
+          const data = await AuthService.getEIResults(eventId);
+          setResults(data.results || []);
+        } else {
+          const allResults = await AuthService.getEventResults(eventId);
+
+          const filtered = allResults.filter(
+            (r) => r.quiz_type === quizType
+          );
+
+          setResults(filtered);
+        }
+      } catch (err) {
+        console.error("Failed to load quiz results:", err);
+        setError("Failed to load results for this quiz.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchResults();
+  }, [eventId, quizType]);
+
+  const getInterpretation = (r) => {
+    if (quizType === "TABBPS") {
+      return (
+        r?.result_json?.final_classification ??
+        r?.final_classification ??
+        null
+      );
+    }
+
+    return (
+      r?.result_json?.interpretation ??
+      r?.interpretation ??
+      null
+    );
+  };
+
+  const getScoreA = (r) =>
+    r?.result_json?.form_a_score ??
+    r?.form_a_score ??
+    null;
+
+  const getScoreB = (r) =>
+    r?.result_json?.form_b_score ??
+    r?.form_b_score ??
+    null;
+
+  const isTabbps = quizType === "TABBPS";
+
+  const hasScoreABColumns =
+    isTabbps &&
+    results.some((r) => getScoreA(r) !== null);
+
+  const getInterpretationInfo = (level) => {
+    if (!level) {
+      return {
+        label: null,
+        badgeClass: "bg-gray-200 text-black border-gray-200"
+      };
+    }
+
+    const text = level.toLowerCase();
+
+    // TABBPS
+    if (text.includes("type a")) {
+      return {
+        label: "Type A",
+        badgeClass:
+          "bg-[#E8D6E1] text-[#5B4A55] border-[#D8C3D0]"
+      };
+    }
+
+    if (text.includes("type b")) {
+      return {
+        label: "Type B",
+        badgeClass:
+          "bg-[#D8E5EA] text-[#46575E] border-[#C5D6DC]"
+      };
+    }
+
+    if (text.includes("mixed") || text.includes("balanced")) {
+      return {
+        label: "Balanced",
+        badgeClass:
+          "bg-[#DDE8DD] text-[#4E5E4E] border-[#CADACA]"
+      };
+    }
+
+    if (text.includes("no strong")) {
+      return {
+        label: "No Strong Pattern",
+        badgeClass:
+          "bg-[#DDD4D2] text-[#5E5551] border-[#CEC3C0]"
+      };
+    }
+
+    if (text.includes("inconclusive")) {
+      return {
+        label: "Inconclusive",
+        badgeClass:
+          "bg-[#E4E2DD] text-[#595750] border-[#D5D2CB]"
+      };
+    }
+
+    // EI
+    if (text.includes("development priority")) {
+      return {
+        label: "Low",
+        badgeClass:
+          "bg-[#F87171] text-black border-[#F87171]"
+      };
+    }
+
+    if (text.includes("needs attention")) {
+      return {
+        label: "Average",
+        badgeClass:
+          "bg-[#FDE047] text-black border-[#FDE047]"
+      };
+    }
+
+    if (text.includes("strength")) {
+      return {
+        label: "Strength",
+        badgeClass:
+          "bg-[#86E8A8] text-black border-[#86E8A8]"
+      };
+    }
+
+    // SCQ / GWBS
+    if (text.includes("above average")) {
+      return {
+        label: "Above Average",
+        badgeClass:
+          "bg-[#86E8A8] text-black border-[#86E8A8]"
+      };
+    }
+
+    if (text.includes("below average")) {
+      return {
+        label: "Below Average",
+        badgeClass:
+          "bg-[#F3D8C7] text-black border-[#F3D8C7]"
+      };
+    }
+
+    if (text.includes("high")) {
+      return {
+        label: "High",
+        badgeClass:
+          "bg-[#3A8458] text-black border-[#3A8458]"
+      };
+    }
+
+    if (text.includes("average")) {
+      return {
+        label: "Average",
+        badgeClass:
+          "bg-[#FDE047] text-black border-[#FDE047]"
+      };
+    }
+
+    if (text.includes("low")) {
+      return {
+        label: "Low",
+        badgeClass:
+          "bg-[#F87171] text-black border-[#F87171]"
+      };
+    }
+
+    return {
+      label: level,
+      badgeClass:
+        "bg-gray-200 text-black border-gray-200"
+    };
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "—";
+
+    try {
+      return new Date(dateStr).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      });
+    } catch {
+      return dateStr;
     }
   };
 
-  const filteredStudents = useMemo(() => {
-    return students.filter(s => {
-      if (selectedCourse !== "All" && s.course !== selectedCourse) return false;
-      if (selectedYear !== "All" && s.year !== selectedYear) return false;
-      return true;
-    });
-  }, [students, selectedCourse, selectedYear]);
-
-  const courses = ["All", "BCA", "MCA", "BTech"];
-  const years = ["All", "1st Year", "2nd Year", "3rd Year", "4th Year"];
-
-  const displayStudents = useMemo(() => {
-    if (quizType !== "EI" || selectedCompetency === "Overall") return filteredStudents;
-    return filteredStudents.map(s => {
-      const randScore = Math.floor(Math.random() * 40) + 10;
-      let interpretation = "";
-      if (randScore > 35) interpretation = "Strength";
-      else if (randScore > 20) interpretation = "Needs Attention";
-      else interpretation = "Development Priority";
-      return { ...s, score: randScore, interpretation };
-    });
-  }, [filteredStudents, selectedCompetency, quizType]);
+  const columnCount = hasScoreABColumns ? 7 : 6;
 
   return (
     <div className="w-full h-full flex flex-col font-sans relative">
+
+      {/* HEADER */}
       <div className="mb-6">
         <button
           onClick={() => navigate("/admin/quizzes")}
@@ -138,155 +261,185 @@ const QuizResults = () => {
             <h1 className="text-3xl font-bold tracking-tight text-[#386641] font-serif leading-none mb-2">
               Quiz Results
             </h1>
+
             <p className="text-sm text-[#9DB1A3] font-semibold">
-              {quizName} • Stress Management Workshop • 6 June 2026 • 2:00 PM
+              {quizName} ({quizType})
             </p>
           </div>
 
-          <div className="flex gap-4 items-center">
-            <div className="flex gap-2">
-              <select 
-                value={selectedCourse} 
-                onChange={e => setSelectedCourse(e.target.value)}
-                className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#386641]/50 text-gray-700 cursor-pointer"
+          {/* EI COMPETENCY SELECTOR */}
+          {quizType === "EI" && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-[#5B5B5B]">
+                Competency
+              </span>
+
+              <select
+                value={selectedCompetency}
+                onChange={(e) =>
+                  setSelectedCompetency(e.target.value)
+                }
+                className="bg-[#386641] text-white px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer outline-none shadow-sm"
               >
-                {courses.map(c => <option key={c} value={c}>{c === "All" ? "All Courses" : c}</option>)}
-              </select>
-              
-              <select 
-                value={selectedYear} 
-                onChange={e => setSelectedYear(e.target.value)}
-                className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-[#386641]/50 text-gray-700 cursor-pointer"
-              >
-                {years.map(y => <option key={y} value={y}>{y === "All" ? "All Years" : y}</option>)}
+                {EI_COMPETENCIES.map((competency) => (
+                  <option
+                    key={competency.key}
+                    value={competency.key}
+                  >
+                    {competency.label}
+                  </option>
+                ))}
               </select>
             </div>
-
-            {quizType === "EI" && (
-              <div className="relative">
-                <button 
-                  onClick={() => setShowCompetencyDropdown(!showCompetencyDropdown)}
-                  className="flex items-center gap-2 bg-[#2E7D4F] hover:bg-[#256641] text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer shadow-sm"
-                >
-                  {selectedCompetency === "Overall" ? "Select Competency" : selectedCompetency}
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                {showCompetencyDropdown && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-100 shadow-xl rounded-xl z-20 overflow-hidden py-1">
-                    {eiCompetencies.map(comp => (
-                      <button
-                        key={comp}
-                        onClick={() => {
-                          setSelectedCompetency(comp);
-                          setShowCompetencyDropdown(false);
-                        }}
-                        className={`block w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer ${selectedCompetency === comp ? 'bg-[#386641]/10 text-[#386641] font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
-                      >
-                        {comp}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
+      {/* RESULTS CARD */}
       <div className="bg-[#F3F2F2] rounded-3xl p-8 flex-1 overflow-hidden flex flex-col">
-        {quizType === "TABBPS" ? (
-          <>
-            <div className="grid grid-cols-7 gap-4 px-6 pb-4 border-b border-black/10 font-serif font-semibold text-black shrink-0">
-              <div className="col-span-2">Student Name</div>
-              <div className="text-center">Roll No.</div>
-              <div className="text-center">Course & Year</div>
-              <div className="text-center">Score A</div>
-              <div className="text-center">Score B</div>
-              <div className="text-center">Interpretation</div>
-            </div>
 
-            <div className="flex flex-col gap-4 mt-6 overflow-y-auto pr-2 pb-10 flex-1">
-              {displayStudents.length === 0 ? (
-                <div className="text-center py-10 text-gray-500 font-medium">No students found matching the selected filters.</div>
-              ) : (
-                displayStudents.map((student, idx) => (
-                  <div
-                    key={idx}
-                    className="grid grid-cols-7 gap-4 items-center bg-[#E5E5E5] border border-transparent rounded-xl px-6 py-3 transition-colors"
-                  >
-                    <div className="col-span-2 text-black font-serif text-lg">
-                      {student.name}
-                    </div>
-                    <div className="text-center text-black font-sans text-base">
-                      {student.rollNo}
-                    </div>
-                    <div className="text-center text-black font-sans text-base flex flex-col">
-                      <span>{student.course}</span>
-                      <span className="text-xs text-gray-500">{student.year}</span>
-                    </div>
-                    <div className="text-center text-black font-sans text-base">
-                      {student.scoreA}
-                    </div>
-                    <div className="text-center text-black font-sans text-base">
-                      {student.scoreB}
-                    </div>
-                    <div className="flex justify-center">
-                      <span
-                        className={`px-6 py-1.5 rounded-full text-sm font-semibold min-w-[200px] text-center shadow-sm border ${getInterpretationBadge(
-                          student.interpretation
-                        )}`}
-                      >
-                        {student.interpretation}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center flex-1 gap-4">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#386641]"></div>
+
+            <p className="text-gray-500 font-medium">
+              Loading results...
+            </p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-10 text-red-600 font-semibold">
+            {error}
+          </div>
         ) : (
           <>
-            <div className="grid grid-cols-6 gap-4 px-6 pb-4 border-b border-black/10 font-serif font-semibold text-black shrink-0">
-              <div className="col-span-2">Student Name</div>
-              <div className="text-center">Roll No.</div>
-              <div className="text-center">Course & Year</div>
-              <div className="text-center">Score</div>
-              <div className="text-center">Interpretation</div>
+            {/* TABLE HEADER */}
+            <div
+              className="grid gap-4 px-6 pb-4 border-b border-black/10 font-serif font-semibold text-black shrink-0"
+              style={{
+                gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`
+              }}
+            >
+              <div className="col-span-2">
+                Student Name
+              </div>
+
+              <div className="text-center">
+                Enrollment No.
+              </div>
+
+              {hasScoreABColumns ? (
+                <>
+                  <div className="text-center">
+                    Score A
+                  </div>
+
+                  <div className="text-center">
+                    Score B
+                  </div>
+                </>
+              ) : (
+                <div className="text-center">
+                  Score
+                </div>
+              )}
+
+              <div className="text-center">
+                Attempted
+              </div>
+
+              <div className="text-center">
+                Interpretation
+              </div>
             </div>
 
+            {/* TABLE BODY */}
             <div className="flex flex-col gap-4 mt-6 overflow-y-auto pr-2 pb-10 flex-1">
-              {displayStudents.length === 0 ? (
-                <div className="text-center py-10 text-gray-500 font-medium">No students found matching the selected filters.</div>
+
+              {results.length === 0 ? (
+                <div className="text-center py-10 text-gray-500 font-medium">
+                  No submitted attempts yet for this quiz.
+                </div>
               ) : (
-                displayStudents.map((student, idx) => (
-                  <div
-                    key={idx}
-                    className="grid grid-cols-6 gap-4 items-center bg-[#E5E5E5] border border-transparent rounded-xl px-6 py-3 transition-colors"
-                  >
-                    <div className="col-span-2 text-black font-serif text-lg">
-                      {student.name}
+                results.map((r, idx) => {
+
+                  let interpretation = null;
+                  let score = null;
+
+                  if (quizType === "EI") {
+                    interpretation =
+                      r?.[selectedCompetency]?.interpretation ??
+                      null;
+
+                    score =
+                      r?.[selectedCompetency]?.score ??
+                      null;
+                  } else {
+                    interpretation = getInterpretation(r);
+                    score = r?.total_score ?? null;
+                  }
+
+                  const {
+                    label: interpretationLabel,
+                    badgeClass
+                  } = getInterpretationInfo(interpretation);
+
+                  return (
+                    <div
+                      key={idx}
+                      className="grid gap-4 items-center bg-[#E5E5E5] border border-transparent rounded-xl px-6 py-3 transition-colors"
+                      style={{
+                        gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`
+                      }}
+                    >
+                      {/* STUDENT */}
+                      <div className="col-span-2 text-black font-serif text-lg">
+                        {r.student_name}
+                      </div>
+
+                      {/* ENROLLMENT */}
+                      <div className="text-center text-black font-sans text-base">
+                        {r.enrollment_no}
+                      </div>
+
+                      {/* SCORES */}
+                      {hasScoreABColumns ? (
+                        <>
+                          <div className="text-center text-black font-sans text-base">
+                            {getScoreA(r) ?? "—"}
+                          </div>
+
+                          <div className="text-center text-black font-sans text-base">
+                            {getScoreB(r) ?? "—"}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center text-black font-sans text-base">
+                          {score ?? "—"}
+                        </div>
+                      )}
+
+                      {/* ATTEMPT DATE */}
+                      <div className="text-center text-black font-sans text-sm">
+                        {formatDate(r.attempted_at)}
+                      </div>
+
+                      {/* INTERPRETATION */}
+                      <div className="flex justify-center">
+                        {interpretation ? (
+                          <span
+                            className={`px-6 py-1.5 rounded-full text-sm font-semibold min-w-[160px] text-center shadow-sm border ${badgeClass}`}
+                          >
+                            {interpretationLabel}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500">
+                            —
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-center text-black font-sans text-base">
-                      {student.rollNo}
-                    </div>
-                    <div className="text-center text-black font-sans text-base flex flex-col">
-                      <span>{student.course}</span>
-                      <span className="text-xs text-gray-500">{student.year}</span>
-                    </div>
-                    <div className="text-center text-black font-sans text-base">
-                      {student.score}
-                    </div>
-                    <div className="flex justify-center">
-                      <span
-                        className={`px-6 py-2 rounded-full text-sm font-semibold min-w-[200px] text-center shadow-sm border ${getInterpretationBadge(
-                          student.interpretation
-                        )}`}
-                      >
-                        {student.interpretation}
-                      </span>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </>
