@@ -1,23 +1,68 @@
 /*use test login Email: yasmin@iips.edu
 Password: password123 */
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
+import logo from "../../assets/icons/logo.png";
 import AuthService from "../../services/auth";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+
+  const [errors, setErrors] = useState({});
+
+  const handleChange = (e) => {
+    setFormData((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+
+    setErrors((prev) => ({
+      ...prev,
+      [e.target.name]: "",
+    }));
+  };
+
+  const validate = (email) => {
+    let err = {};
+
+    if (!email) {
+      err.email = "Email is required";
+    } else if (
+      !/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)
+    ) {
+      err.email = "Enter a valid email";
+    }
+
+    if (!formData.password.trim()) {
+      err.password = "Password is required";
+    }
+
+    setErrors(err);
+
+    return Object.keys(err).length === 0;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    const email = formData.email.trim();
+    if (!validate(email)) return;
+
     setLoading(true);
 
     try {
-      const data = await AuthService.login(email, password);
+      const data = await AuthService.login(email, formData.password);
       if (data.role === "admin") {
         navigate("/admin/dashboard", { replace: true });
       } else {
@@ -33,67 +78,138 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center p-4">
-      {/* Background decorative shapes */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-[#A7C957]/10 blur-[80px]"></div>
-        <div className="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] rounded-full bg-[#386641]/5 blur-[80px]"></div>
-      </div>
+    <div className="min-h-screen bg-[#16342F] flex items-center justify-center p-4">
+      <div className="w-[92vw] max-w-[980px] h-auto min-h-[550px] my-4 bg-white rounded-2xl shadow-2xl overflow-hidden grid lg:grid-cols-[40%_60%]">
+        
+        {/* LEFT PANEL */}
+        <div className="hidden lg:flex relative overflow-hidden bg-gradient-to-br from-[#0B3B33] via-[#1E6655] to-[#4DA387]">
+          <div className="absolute -top-20 -left-20 w-52 h-52 rounded-full bg-white/10"></div>
+          <div className="absolute bottom-0 -right-20 w-52 h-52 rounded-full bg-white/10"></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] rounded-full bg-white/5"></div>
+          
+          <div className="relative z-10 flex flex-col items-center justify-center w-full px-8 text-center">
+            <div className="bg-white rounded-full p-1.5 shadow-lg">
+              <img
+                src={logo}
+                alt="logo"
+                className="w-28 h-28 object-contain"
+              />
+            </div>
 
-      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-2xl w-full max-w-[450px] relative z-10">
-        {/* Logo and title */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-full bg-[#A7C957] flex items-center justify-center mb-4 shadow-md">
-            <svg className="w-9 h-9 text-[#386641]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
-            </svg>
+            <h1 className="mt-4 text-2xl font-serif font-bold text-[#E9F7EF]">
+              ManoMitra
+            </h1>
+
+            <p className="mt-1 text-xs font-semibold text-green-100">
+              Administrator Portal
+            </p>
+
+            <p className="mt-5 text-center text-[11px] leading-5 text-green-50 max-w-xs">
+              Welcome back to the Manomitra Administrator Portal. Sign in to manage workshops, counseling sessions, events, and monitor student wellbeing metrics.
+            </p>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#386641] font-serif leading-none">Manomitra</h1>
-          <p className="text-sm text-gray-500 mt-2 font-semibold">Administrator Portal</p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm mb-6 border border-red-100 font-medium">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5 font-sans">Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="e.g. yasmin@iips.edu"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-[#FAF8F5] focus:outline-none focus:ring-2 focus:ring-[#386641]/50 focus:border-[#386641] transition-all text-gray-800 font-sans"
-            />
+        {/* RIGHT PANEL */}
+        <div className="relative flex flex-col justify-center px-8 py-8 lg:px-12">
+          <div className="absolute top-6 right-8 text-[#1D5C4F] font-sans font-bold text-xs uppercase tracking-wider">
+            Admin Login
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1.5 font-sans">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              placeholder="••••••••"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-[#FAF8F5] focus:outline-none focus:ring-2 focus:ring-[#386641]/50 focus:border-[#386641] transition-all text-gray-800 font-sans"
-            />
+          <div className="lg:hidden flex justify-center mb-5">
+            <div className="bg-white rounded-full p-1.5 shadow-md">
+              <img
+                src={logo}
+                alt="logo"
+                className="w-16 h-16 object-contain"
+              />
+            </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#386641] hover:bg-[#477250] active:bg-[#2d5134] text-white py-3.5 rounded-xl font-semibold tracking-wide shadow-md transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed mt-2 font-sans"
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
+          <h2 className="text-2xl lg:text-3xl font-extrabold leading-none text-[#143E36]">
+            Welcome Back
+          </h2>
+
+          <p className="mt-1 mb-6 text-xs text-gray-500">
+            Login to your account
+          </p>
+
+          {error && (
+            <div className="bg-red-50 text-red-700 p-3 rounded-lg text-xs mb-4 border border-red-100 font-medium">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email */}
+            <div>
+              <label className="block mb-1 text-xs font-semibold text-gray-700">
+                Email Address :
+              </label>
+
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="Enter your email"
+                className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-1.5 text-xs outline-none transition-all duration-300 focus:border-[#1D5C4F] focus:bg-white focus:ring-4 focus:ring-[#1D5C4F]/20"
+              />
+
+              {errors.email && (
+                <p className="mt-1 text-xs text-red-500">
+                  {errors.email}
+                </p>
+              )}
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="block mb-1 text-xs font-semibold text-gray-700">
+                Password :
+              </label>
+
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="Enter your password"
+                  className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-1.5 text-xs pr-10 outline-none transition-all duration-300 focus:border-[#1D5C4F] focus:bg-white focus:ring-4 focus:ring-[#1D5C4F]/20"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1D5C4F]"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+
+              {errors.password && (
+                <p className="mt-1 text-xs text-red-500">
+                  {errors.password}
+                </p>
+              )}
+            </div>
+
+            {/* Login Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-lg bg-gradient-to-r from-[#164C40] via-[#2F7D68] to-[#52A98A] py-2 text-xs font-bold text-white shadow transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-60"
+            >
+              {loading ? "Signing In..." : "Sign In"}
+            </button>
+          </form>
+        </div>
+
       </div>
     </div>
   );
 };
 
 export default Login;
+

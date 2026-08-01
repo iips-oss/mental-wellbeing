@@ -54,6 +54,17 @@ const AuthService = {
     const response = await API.get(`/admin/events/${eventId}/quizzes`);
     return response.data;
   },
+  
+  cancelEvent: async (eventId, cancellationReason) => {
+  const response = await API.patch(
+    `/admin/events/${eventId}/cancel`,
+    {
+      cancellation_reason: cancellationReason,
+    }
+  );
+
+  return response.data;
+},
 
   // Returns every QuizTemplate across all events in one call, already joined
   // with its event's title/date/time/status. Avoids the N+1 pattern of

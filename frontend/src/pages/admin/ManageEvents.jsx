@@ -11,11 +11,16 @@ const ManageEvents = () => {
   const [activeTab, setActiveTab] = useState("Active Events"); // "Past Events" or "Active Events"
   const [showAddModal, setShowAddModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedPastEvent, setSelectedPastEvent] = useState(null);
   const [pastEventQuizzes, setPastEventQuizzes] = useState([]);
   const [loadingPastEventQuizzes, setLoadingPastEventQuizzes] = useState(false);
   const [pastEventQuizzesError, setPastEventQuizzesError] = useState("");
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showErrorBanner, setShowErrorBanner] = useState(false);
+  const [errorBannerMessage, setErrorBannerMessage] = useState("");
 
   // Form states
   const [title, setTitle] = useState("");
@@ -34,7 +39,8 @@ const ManageEvents = () => {
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [formError, setFormError] = useState("");
-  const [completing, setCompleting] = useState(false);
+  const [completing, setCompleting] = useState(false);  const [cancelReason, setCancelReason] = useState("");
+
   const tabs = ["Past Events", "Active Events"];
 
   const fetchEvents = async () => {
@@ -73,6 +79,7 @@ const ManageEvents = () => {
     setSelectedQuizzes({ SCQ: true, GWBS: true, TABBPS: false, EI: false });
     setOtp("4821");
     setFormError("");
+    setCancelReason("");
   };
 
   const openAddModal = () => {
@@ -193,14 +200,61 @@ const ManageEvents = () => {
       resetForm();
       await fetchEvents();
     } catch (err) {
-      console.error("Failed to update event:", err);
-      setFormError(
-        err?.response?.data?.detail || "Failed to update event. Please try again."
-      );
-    } finally {
+      setFormError("Failed to update event.");
       setSubmitting(false);
     }
   };
+
+    const handleCancelEventSubmit = async () => {
+      if (!cancelReason.trim()) {
+        setErrorBannerMessage("Please provide a cancellation reason.");
+        setShowErrorBanner(true);
+
+        setTimeout(() => {
+          setShowErrorBanner(false);
+        }, 3000);
+
+        return;
+      }
+
+      setSubmitting(true);
+
+      try {
+        await AuthService.cancelEvent(
+          selectedEventId,
+          cancelReason.trim()
+        );
+
+        setSuccessMessage("Event cancelled successfully.");
+        setShowSuccessBanner(true);
+
+        setShowCancelModal(false);
+        setShowManageModal(false);
+        setCancelReason("");
+
+        await fetchEvents();
+
+        setTimeout(() => {
+          setShowSuccessBanner(false);
+        }, 3000);
+      } catch (err) {
+        console.error("Error cancelling event:", err);
+
+        setErrorBannerMessage(
+          err?.response?.data?.detail ||
+          err?.message ||
+          "Failed to cancel the event."
+        );
+
+        setShowErrorBanner(true);
+
+        setTimeout(() => {
+          setShowErrorBanner(false);
+        }, 3000);
+      } finally {
+        setSubmitting(false);
+      }
+    };
 
   const handleCancelEvent = async () => {
     const reason = window.prompt(
@@ -303,6 +357,44 @@ const handleCompleteEvent = async () => {
           Add Event
         </button>
       </div>
+
+      {showSuccessBanner && (
+        <div className="fixed top-6 right-6 z-[100] animate-fade-in">
+          <div className="flex items-center gap-3 bg-[#EAF7EE] border border-[#73D38F] rounded-xl px-5 py-3 shadow-lg">
+            <div className="w-9 h-9 rounded-full bg-[#2E7D4F] flex items-center justify-center">
+              <Check className="w-5 h-5 text-white" />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-[#386641]">
+                Event Cancelled
+              </p>
+              <p className="text-xs text-[#6A8070]">
+                {successMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showErrorBanner && (
+        <div className="fixed top-6 right-6 z-[100] animate-fade-in">
+          <div className="flex items-center gap-3 bg-[#FDF0F0] border border-[#F5A8A8] rounded-xl px-5 py-3 shadow-lg">
+            <div className="w-9 h-9 rounded-full bg-[#D14343] flex items-center justify-center">
+              <X className="w-5 h-5 text-white" />
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-[#A12828]">
+                Cancellation Failed
+              </p>
+              <p className="text-xs text-[#8F5A5A]">
+                {errorBannerMessage}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-700 p-4 rounded-xl text-sm mb-6 border border-red-100 font-semibold font-sans">
@@ -407,7 +499,7 @@ const handleCompleteEvent = async () => {
 
       {/* Shared Modal Form Components */}
       {(showAddModal || showManageModal) && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40 animate-fade-in backdrop-blur-sm">
           <div className="bg-[#F3F2F2] rounded-3xl p-8 max-w-2xl w-full shadow-2xl relative border border-[#2F3C36] max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => { setShowAddModal(false); setShowManageModal(false); }}
@@ -690,9 +782,65 @@ const handleCompleteEvent = async () => {
         </div>
       )}
 
+      {/* NEW Cancel Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+          <div className="bg-[#F3F2F2] rounded-3xl p-8 max-w-md w-full shadow-2xl relative border border-[#2F3C36]">
+            <button
+              onClick={() => { setShowCancelModal(false); setCancelReason(""); }}
+              className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition-all cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-6">
+              <h3 className="text-2xl font-bold text-red-600 font-serif leading-none mb-2">
+                Cancel Event
+              </h3>
+              <p className="text-sm text-[#9DB1A3] font-medium">
+                This action cannot be undone. Please provide a reason for cancellation.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-black mb-1.5 font-sans">
+                  Cancellation Reason <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  rows="3"
+                  placeholder="e.g. Due to unforeseen circumstances..."
+                  className="w-full border border-[#2F3C36]/20 rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-red-500/50 text-[#3E4F45] resize-none"
+                ></textarea>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4">
+                <button
+                  type="button"
+                  onClick={() => { setShowCancelModal(false); setCancelReason(""); }}
+                  className="border border-[#2F3C36]/20 bg-white text-black px-6 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors cursor-pointer text-sm"
+                >
+                  Nevermind
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelEventSubmit}
+                  disabled={submitting}
+                  className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-sm"
+                >
+                  {submitting ? "Cancelling..." : "Confirm Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Past Event Details Modal */}
       {selectedPastEvent && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-40 animate-fade-in backdrop-blur-sm">
           <div className="bg-[#F3F2F2] rounded-3xl p-8 max-w-2xl w-full shadow-2xl relative border border-[#2F3C36] max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setSelectedPastEvent(null)}
