@@ -39,8 +39,8 @@ const ManageEvents = () => {
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [formError, setFormError] = useState("");
-  const [completing, setCompleting] = useState(false);  const [cancelReason, setCancelReason] = useState("");
-
+  const [cancelReason, setCancelReason] = useState("");
+  const [completing, setCompleting] = useState(false);
   const tabs = ["Past Events", "Active Events"];
 
   const fetchEvents = async () => {
@@ -200,118 +200,90 @@ const ManageEvents = () => {
       resetForm();
       await fetchEvents();
     } catch (err) {
-      setFormError("Failed to update event.");
+      console.error("Failed to update event:", err);
+      setFormError(
+        err?.response?.data?.detail || "Failed to update event. Please try again."
+      );
+    } finally {
       setSubmitting(false);
     }
   };
 
-    const handleCancelEventSubmit = async () => {
-      if (!cancelReason.trim()) {
-        setErrorBannerMessage("Please provide a cancellation reason.");
-        setShowErrorBanner(true);
+  const handleCancelEventSubmit = async () => {
+    if (!cancelReason.trim()) {
+      setErrorBannerMessage("Please provide a cancellation reason.");
+      setShowErrorBanner(true);
 
-        setTimeout(() => {
-          setShowErrorBanner(false);
-        }, 3000);
+      setTimeout(() => {
+        setShowErrorBanner(false);
+      }, 3000);
 
-        return;
-      }
+      return;
+    }
 
-      setSubmitting(true);
+    setSubmitting(true);
 
-      try {
-        await AuthService.cancelEvent(
-          selectedEventId,
-          cancelReason.trim()
-        );
+    try {
+      await AuthService.cancelEvent(
+        selectedEventId,
+        cancelReason.trim()
+      );
 
-        setSuccessMessage("Event cancelled successfully.");
-        setShowSuccessBanner(true);
+      setSuccessMessage("Event cancelled successfully.");
+      setShowSuccessBanner(true);
 
-        setShowCancelModal(false);
-        setShowManageModal(false);
-        setCancelReason("");
+      setShowCancelModal(false);
+      setShowManageModal(false);
+      setCancelReason("");
 
-        await fetchEvents();
+      await fetchEvents();
 
-        setTimeout(() => {
-          setShowSuccessBanner(false);
-        }, 3000);
-      } catch (err) {
-        console.error("Error cancelling event:", err);
+      setTimeout(() => {
+        setShowSuccessBanner(false);
+      }, 3000);
+    } catch (err) {
+      console.error("Error cancelling event:", err);
 
-        setErrorBannerMessage(
-          err?.response?.data?.detail ||
-          err?.message ||
-          "Failed to cancel the event."
-        );
+      setErrorBannerMessage(
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Failed to cancel the event."
+      );
 
-        setShowErrorBanner(true);
+      setShowErrorBanner(true);
 
-        setTimeout(() => {
-          setShowErrorBanner(false);
-        }, 3000);
-      } finally {
-        setSubmitting(false);
-      }
-    };
+      setTimeout(() => {
+        setShowErrorBanner(false);
+      }, 3000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-  const handleCancelEvent = async () => {
-    const reason = window.prompt(
-      "Please provide a reason for cancelling this event:",
-      "Cancelled by admin"
-    );
-
-    // user hit Cancel on the prompt itself
-    if (reason === null) return;
-
+  const handleCompleteEvent = async () => {
     const confirmed = window.confirm(
-      "Are you sure you want to cancel this event? This cannot be undone, and students will no longer be able to submit quizzes for it."
+      "Mark this event as completed? It will move to Past Events and quiz results will become viewable."
     );
 
     if (!confirmed) return;
 
-    setCancelling(true);
+    setCompleting(true);
     setFormError("");
 
     try {
-      await AuthService.cancelEvent(selectedEventId, reason);
+      await AuthService.completeEvent(selectedEventId);
       setShowManageModal(false);
       resetForm();
       await fetchEvents();
     } catch (err) {
-      console.error("Failed to cancel event:", err);
+      console.error("Failed to complete event:", err);
       setFormError(
-        err?.response?.data?.detail || "Failed to cancel event. Please try again."
+        err?.response?.data?.detail || "Failed to mark event as completed. Please try again."
       );
     } finally {
-      setCancelling(false);
+      setCompleting(false);
     }
   };
-const handleCompleteEvent = async () => {
-  const confirmed = window.confirm(
-    "Mark this event as completed? It will move to Past Events and quiz results will become viewable."
-  );
-
-  if (!confirmed) return;
-
-  setCompleting(true);
-  setFormError("");
-
-  try {
-    await AuthService.completeEvent(selectedEventId);
-    setShowManageModal(false);
-    resetForm();
-    await fetchEvents();
-  } catch (err) {
-    console.error("Failed to complete event:", err);
-    setFormError(
-      err?.response?.data?.detail || "Failed to mark event as completed. Please try again."
-    );
-  } finally {
-    setCompleting(false);
-  }
-};
   const generateNewOtp = () => {
     const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
     setOtp(newOtp);
@@ -737,20 +709,20 @@ const handleCompleteEvent = async () => {
               )}
 
               <div className="flex justify-between items-center pt-6 border-t border-black/10">
-              {showManageModal ? (
+                {showManageModal ? (
                   <div className="flex gap-3">
                     <button
                       type="button"
-                      onClick={handleCancelEvent}
-                      disabled={cancelling || completing}
+                      onClick={() => setShowCancelModal(true)}
+                      disabled={submitting || completing}
                       className="text-red-500 font-semibold text-sm hover:bg-red-50 px-4 py-2 rounded-lg border border-transparent hover:border-red-100 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <X className="w-4 h-4" /> {cancelling ? "Cancelling..." : "Cancel event"}
+                      <X className="w-4 h-4" /> Cancel event
                     </button>
                     <button
                       type="button"
                       onClick={handleCompleteEvent}
-                      disabled={cancelling || completing}
+                      disabled={submitting || completing}
                       className="text-[#2E7D4F] font-semibold text-sm hover:bg-green-50 px-4 py-2 rounded-lg border border-transparent hover:border-green-100 transition-colors cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Check className="w-4 h-4" /> {completing ? "Completing..." : "Mark as completed"}
