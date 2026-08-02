@@ -897,7 +897,7 @@ const MobileManageEvents = () => {
                               key={quizName}
                               onClick={() => {
                                 setSelectedPastEvent(null);
-                                navigate(`/admin/quizzes/1/results?eventId=${selectedPastEvent.id}&quizType={quizName}`);
+                                navigate(`/admin/quizzes/1/results?eventId=${selectedPastEvent.id}&quizType=${quizName}`);
                               }}
                               className="bg-white border border-[#2F3C36]/20 rounded-xl p-4 cursor-pointer hover:border-[#386641] hover:shadow-md transition-all group"
                             >
