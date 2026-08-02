@@ -16,6 +16,12 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 from models.event import Event, EventReport, EventRSVP
 
+
+def student_display_id(student: Student) -> str:
+    """Roll number if assigned, else fall back to enrollment number."""
+    return student.roll_number if student.roll_number else student.enrollment_no
+
+
 @router.get("/events")
 def get_admin_events(
     db: Session = Depends(get_db),
@@ -443,7 +449,8 @@ def get_scq_results(
         "results": [
             {
                 "student_name": student.name,
-                "enrollment_no": student.enrollment_no,
+                "enrollment_no": student_display_id(student),
+                "is_provisional_id": student.roll_number is None,
                 "total_score": attempt.total_score,
                 "interpretation": attempt.result_json.get("interpretation"),
                 "dimension_scores": attempt.result_json.get("dimension_scores")
@@ -480,7 +487,8 @@ def get_gwbs_results(
         "results": [
             {
                 "student_name": student.name,
-                "enrollment_no": student.enrollment_no,
+                "enrollment_no": student_display_id(student),
+                "is_provisional_id": student.roll_number is None,
                 "total_score": attempt.total_score,
                 "interpretation": attempt.result_json.get("interpretation"),
                 "dimension_scores": attempt.result_json.get("dimension_scores")
@@ -517,7 +525,8 @@ def get_tabbps_results(
         "results": [
             {
                 "student_name": student.name,
-                "enrollment_no": student.enrollment_no,
+                "enrollment_no": student_display_id(student),
+                "is_provisional_id": student.roll_number is None,
                 "final_classification": attempt.result_json.get("final_classification"),
                 "form_a_score": attempt.result_json.get("form_a_score"),
                 "form_a_interpretation": attempt.result_json.get("form_a_interpretation"),
@@ -558,7 +567,8 @@ def get_ei_results(
     "results": [
         {
             "student_name": student.name,
-            "enrollment_no": student.enrollment_no,
+            "enrollment_no": student_display_id(student),
+            "is_provisional_id": student.roll_number is None,
             "Self_Awareness": {
                 "score": attempt.result_json.get("competency_scores", {}).get("Self_Awareness"),
                 "interpretation": attempt.result_json.get("competency_interpretations", {}).get("Self_Awareness")
@@ -611,7 +621,8 @@ def get_overall_results(
         if sid not in student_map:
             student_map[sid] = {
                 "student_name": student.name,
-                "enrollment_no": student.enrollment_no,
+                "enrollment_no": student_display_id(student),
+                "is_provisional_id": student.roll_number is None,
                 "SCQ": None,
                 "GWBS": None,
                 "TABBPS": None,
@@ -674,7 +685,8 @@ def get_event_results(
     return [
         {
             "student_name": student.name,
-            "enrollment_no": student.enrollment_no,
+            "enrollment_no": student_display_id(student),
+            "is_provisional_id": student.roll_number is None,
             "quiz_type": quiz_template.quiz_type,
             "total_score": attempt.total_score,
             "result_json": attempt.result_json,

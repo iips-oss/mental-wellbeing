@@ -13,17 +13,20 @@ from services.quiz_scoring import (
     EI_COMPETENCIES
 )
 
+
 def get_scq_dim(q_no: int) -> str:
     for dim, questions in SCQ_DIMENSIONS.items():
         if q_no in questions:
             return dim
     return "Unknown"
 
+
 def get_gwbs_dim(q_no: int) -> str:
     for dim, groups in GWBS_DIMENSIONS.items():
         if q_no in groups["positive"] or q_no in groups["negative"]:
             return dim
     return "Unknown"
+
 
 def get_tabbps_factor(form: str, q_no: int) -> str:
     factors = TABBPS_FORM_A_FACTORS if form == "A" else TABBPS_FORM_B_FACTORS
@@ -32,15 +35,26 @@ def get_tabbps_factor(form: str, q_no: int) -> str:
             return factor
     return "Unknown"
 
+
 def get_ei_comp(q_no: int) -> str:
     for comp, questions in EI_COMPETENCIES.items():
         if q_no in questions:
             return comp
     return "Unknown"
 
-def get_or_create_option_set(db: Session, label: str, description: str, options_tuples: list) -> OptionSet:
+
+def get_or_create_option_set(
+    db: Session,
+    label: str,
+    description: str,
+    options_tuples: list
+) -> OptionSet:
     """
+    Finds an existing OptionSet by label, or creates it with the given options.
     options_tuples: list of (option_text, score_value, display_order)
+
+    This is idempotent — safe to call multiple times for the same label.
+    The label uniqueness constraint on OptionSet prevents duplicates.
     """
     opt_set = db.query(OptionSet).filter(OptionSet.label == label).first()
     if not opt_set:
@@ -62,35 +76,72 @@ def get_or_create_option_set(db: Session, label: str, description: str, options_
             )
             db.add(opt)
         db.flush()
+
     return opt_set
 
+
 def get_or_create_gwbs_option_set(db: Session) -> OptionSet:
-    options_tuples = [(opt_text, idx + 1, idx + 1) for idx, opt_text in enumerate(GWBS_OPTIONS)]
-    return get_or_create_option_set(db, "gwbs_likert_5", "GWBS 5-point scale (Strongly Disagree=1 to Strongly Agree=5)", options_tuples)
+    # GWBS: Strongly Disagree=1 → Strongly Agree=5
+    options_tuples = [
+        (opt_text, idx + 1, idx + 1)
+        for idx, opt_text in enumerate(GWBS_OPTIONS)
+    ]
+    return get_or_create_option_set(
+        db,
+        "gwbs_likert_5",
+        "GWBS 5-point scale (Strongly Disagree=1 to Strongly Agree=5)",
+        options_tuples
+    )
+
 
 def get_or_create_tabbps_option_set(db: Session) -> OptionSet:
     # TABBPS: Strongly Agree=5, Agree=4, Uncertain=3, Disagree=2, Strongly Disagree=1
     scores = [5, 4, 3, 2, 1]
-    options_tuples = [(opt_text, scores[idx], idx + 1) for idx, opt_text in enumerate(TABBPS_OPTIONS)]
-    return get_or_create_option_set(db, "tabbps_likert_5", "TABBPS 5-point scale (Strongly Agree=5 to Strongly Disagree=1)", options_tuples)
+    options_tuples = [
+        (opt_text, scores[idx], idx + 1)
+        for idx, opt_text in enumerate(TABBPS_OPTIONS)
+    ]
+    return get_or_create_option_set(
+        db,
+        "tabbps_likert_5",
+        "TABBPS 5-point scale (Strongly Agree=5 to Strongly Disagree=1)",
+        options_tuples
+    )
+
 
 def get_or_create_ei_option_set(db: Session) -> OptionSet:
-    options_tuples = [(opt_text, idx + 1, idx + 1) for idx, opt_text in enumerate(EI_OPTIONS)]
-    return get_or_create_option_set(db, "ei_likert_5", "EI 5-point scale (Does not apply=1 to Always applies=5)", options_tuples)
+    # EI: Does Not Apply=1 → Always Applies=5
+    options_tuples = [
+        (opt_text, idx + 1, idx + 1)
+        for idx, opt_text in enumerate(EI_OPTIONS)
+    ]
+    return get_or_create_option_set(
+        db,
+        "ei_likert_5",
+        "EI 5-point scale (Does not apply=1 to Always applies=5)",
+        options_tuples
+    )
+
 
 def get_or_create_scq_option_set(db: Session, q_no: int) -> OptionSet:
+    # SCQ: each question has its own unique 5-point option set (different wording per question)
+    # score is always 5→1 (positive to negative), display_order matches array index
     options_list = SCQ_OPTIONS[q_no - 1]
     scores = [5, 4, 3, 2, 1]
-    options_tuples = [(opt_text, scores[idx], idx + 1) for idx, opt_text in enumerate(options_list)]
-    return get_or_create_option_set(db, f"scq_options_q{q_no}", f"SCQ question {q_no} unique 5-point scale", options_tuples)
+    options_tuples = [
+        (opt_text, scores[idx], idx + 1)
+        for idx, opt_text in enumerate(options_list)
+    ]
+    return get_or_create_option_set(
+        db,
+        f"scq_options_q{q_no}",
+        f"SCQ question {q_no} unique 5-point scale",
+        options_tuples
+    )
+
 
 def populate_quiz_questions(db: Session, quiz_type: str):
-    """
-    Populates the shared question bank + option sets for a given quiz_type.
-    This should be called exactly ONCE per quiz_type (SCQ, GWBS, TABBPS, EI) —
-    NOT once per event/QuizTemplate. Questions are shared across every event
-    that uses this quiz_type.
-    """
+    
     quiz_type = quiz_type.upper()
 
     if quiz_type == "SCQ":
@@ -104,7 +155,7 @@ def populate_quiz_questions(db: Session, quiz_type: str):
                 question_no=i,
                 question_text=SCQ_QUESTIONS[i - 1],
                 area_code=area_code,
-                form=None
+                form=None   # SCQ has no form grouping
             )
             db.add(q)
 
@@ -119,13 +170,15 @@ def populate_quiz_questions(db: Session, quiz_type: str):
                 question_no=i,
                 question_text=GWBS_QUESTIONS[i - 1],
                 area_code=area_code,
-                form=None
+                form=None   # GWBS has no form grouping
             )
             db.add(q)
 
     elif quiz_type == "TABBPS":
         opt_set = get_or_create_tabbps_option_set(db)
-        # Form A questions (17)
+
+        # Form A: 17 questions, question_no 1–17, form="A"
+        # These overlap in question_no with Form B — form is the disambiguator
         for i in range(1, len(TABBPS_FORM_A_QUESTIONS) + 1):
             q = QuizQuestion(
                 id=str(uuid.uuid4()),
@@ -137,7 +190,8 @@ def populate_quiz_questions(db: Session, quiz_type: str):
                 form="A"
             )
             db.add(q)
-        # Form B questions (16)
+
+        # Form B: 16 questions, question_no 1–16, form="B"
         for i in range(1, len(TABBPS_FORM_B_QUESTIONS) + 1):
             q = QuizQuestion(
                 id=str(uuid.uuid4()),
@@ -161,6 +215,6 @@ def populate_quiz_questions(db: Session, quiz_type: str):
                 question_no=i,
                 question_text=EI_QUESTIONS[i - 1],
                 area_code=area_code,
-                form=None
+                form=None   # EI has no form grouping
             )
             db.add(q)
