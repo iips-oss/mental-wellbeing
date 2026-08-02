@@ -205,35 +205,54 @@ const MobileManageEvents = () => {
     }
   };
 
-  const handleCancelEvent = async () => {
-    const reason = window.prompt(
-      "Please provide a reason for cancelling this event:",
-      "Cancelled by admin"
-    );
+  const handleCancelEventSubmit = async () => {
+    if (!cancelReason.trim()) {
+      setErrorBannerMessage("Please provide a cancellation reason.");
+      setShowErrorBanner(true);
 
-    if (reason === null) return;
+      setTimeout(() => {
+        setShowErrorBanner(false);
+      }, 3000);
 
-    const confirmed = window.confirm(
-      "Are you sure you want to cancel this event? This cannot be undone, and students will no longer be able to submit quizzes for it."
-    );
+      return;
+    }
 
-    if (!confirmed) return;
-
-    setCancelling(true);
-    setFormError("");
+    setSubmitting(true);
 
     try {
-      await AuthService.cancelEvent(selectedEventId, reason);
-      setShowManageModal(false);
-      resetForm();
-      await fetchEvents();
-    } catch (err) {
-      console.error("Failed to cancel event:", err);
-      setFormError(
-        err?.response?.data?.detail || "Failed to cancel event. Please try again."
+      await AuthService.cancelEvent(
+        selectedEventId,
+        cancelReason.trim()
       );
+
+      setSuccessMessage("Event cancelled successfully.");
+      setShowSuccessBanner(true);
+
+      setShowCancelModal(false);
+      setShowManageModal(false);
+      setCancelReason("");
+
+      await fetchEvents();
+
+      setTimeout(() => {
+        setShowSuccessBanner(false);
+      }, 3000);
+    } catch (err) {
+      console.error("Error cancelling event:", err);
+
+      setErrorBannerMessage(
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Failed to cancel the event."
+      );
+
+      setShowErrorBanner(true);
+
+      setTimeout(() => {
+        setShowErrorBanner(false);
+      }, 3000);
     } finally {
-      setCancelling(false);
+      setSubmitting(false);
     }
   };
 
