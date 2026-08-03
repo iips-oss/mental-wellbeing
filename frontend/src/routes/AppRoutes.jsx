@@ -7,6 +7,8 @@ import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import RoleSelection from "../pages/auth/RoleSelection";
 import AdminLogin from "../pages/auth/AdminLogin";
+import ForgotPassword from "../pages/auth/ForgotPassword";
+import ResetPassword from "../pages/auth/ResetPassword";
 
 import Dashboard from "../pages/admin/Dashboard";
 import ManageEvents from "../pages/admin/ManageEvents";
@@ -28,6 +30,8 @@ import MobileLogin from "../pages/mobile/auth/MobileLogin";
 import MobileRegister from "../pages/mobile/auth/MobileRegister";
 import MobileRoleSelection from "../pages/mobile/auth/MobileRoleSelection";
 import MobileAdminLogin from "../pages/mobile/auth/MobileAdminLogin";
+import MobileForgotPassword from "../pages/mobile/auth/MobileForgotPassword";
+import MobileResetPassword from "../pages/mobile/auth/MobileResetPassword";
 
 import MobileDashboard from "../pages/mobile/admin/MobileDashboard";
 import MobileManageEvents from "../pages/mobile/admin/MobileManageEvents";
@@ -64,6 +68,8 @@ const AppRoutes = () => {
       <Route path="/role-selection" element={isMobile ? <MobileRoleSelection /> : <RoleSelection />} />
       <Route path="/login" element={isMobile ? <MobileLogin /> : <Login />} />
       <Route path="/register" element={isMobile ? <MobileRegister /> : <Register />} />
+      <Route path="/forgot-password" element={isMobile ? <MobileForgotPassword /> : <ForgotPassword />} />
+      <Route path="/reset-password" element={isMobile ? <MobileResetPassword /> : <ResetPassword />} />
       <Route path="/admin/login" element={isMobile ? <MobileAdminLogin /> : <AdminLogin />} />
 
       <Route
