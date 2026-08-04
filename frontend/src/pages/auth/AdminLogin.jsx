@@ -1,7 +1,7 @@
 /*use test login Email: yasmin@iips.edu
 Password: password123 */
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import logo from "../../assets/icons/logo.png";
 import AuthService from "../../services/auth";
@@ -195,11 +195,21 @@ const Login = () => {
               )}
             </div>
 
+            {/* Forgot Password */}
+            <div className="flex justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-semibold text-[#1D5C4F] hover:underline"
+              >
+                Forgot Password?
+              </Link>
+            </div>
+
             {/* Login Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-gradient-to-r from-[#164C40] via-[#2F7D68] to-[#52A98A] py-2 text-xs font-bold text-white shadow transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-60"
+              className="w-full rounded-lg bg-gradient-to-r from-[#164C40] via-[#2F7D68] to-[#52A98A] py-2 text-xs font-bold text-white shadow transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-60 cursor-pointer"
             >
               {loading ? "Signing In..." : "Sign In"}
             </button>
