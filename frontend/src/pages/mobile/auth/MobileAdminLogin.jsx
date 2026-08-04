@@ -1,7 +1,7 @@
 /*use test login Email: yasmin@iips.edu
 Password: password123 */
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AuthService from "../../../services/auth";
 
 const Login = () => {
@@ -81,6 +81,15 @@ const Login = () => {
               placeholder="••••••••"
               className="w-full border border-gray-200 rounded-xl px-4 py-3 bg-[#FAF8F5] focus:outline-none focus:ring-2 focus:ring-[#386641]/50 focus:border-[#386641] transition-all text-gray-800 font-sans"
             />
+          </div>
+
+          <div className="flex justify-end -mt-1">
+            <Link
+              to="/forgot-password"
+              className="text-xs font-semibold text-[#386641] hover:underline"
+            >
+              Forgot Password?
+            </Link>
           </div>
 
           <button
