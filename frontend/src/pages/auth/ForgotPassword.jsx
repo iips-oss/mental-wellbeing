@@ -9,11 +9,11 @@ const ForgotPassword = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const validate = () => {
-    if (!email.trim()) {
+  const validate = (normalizedEmail) => {
+    if (!normalizedEmail) {
       setError("Email is required");
       return false;
-    } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)) {
+    } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(normalizedEmail)) {
       setError("Enter a valid email");
       return false;
     }
@@ -26,11 +26,12 @@ const ForgotPassword = () => {
     setError("");
     setSuccess("");
 
-    if (!validate()) return;
+    const normalizedEmail = email.trim();
+    if (!validate(normalizedEmail)) return;
 
     try {
       setLoading(true);
-      const response = await API.post("/auth/forgot-password", { email });
+      const response = await API.post("/auth/forgot-password", { email: normalizedEmail });
       setSuccess(response.data?.message || "If an account exists for this email, a reset link has been sent.");
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to process request. Please try again.");
