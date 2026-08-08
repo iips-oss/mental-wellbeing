@@ -71,7 +71,17 @@ const QuizAttempt = () => {
     );
   }
 
-  const questions = quiz.questions || [];
+  // ── ONLY CHANGE IN THIS FILE ──────────────────────────────────
+  // Backend returns questions as a flat array for SCQ/GWBS/EI,
+  // but as {"A": [...], "B": [...]} for TABBPS.
+  // Normalize to a flat array so the rest of the component works
+  // identically for all quiz types. question.form is still on each
+  // object so the submit handler can re-split A/B when needed.
+  const questions = Array.isArray(quiz.questions)
+    ? quiz.questions
+    : Object.values(quiz.questions).flat();
+  // ─────────────────────────────────────────────────────────────
+
   const totalQuestions = questions.length;
   const question = questions[currentQuestion];
 
@@ -170,9 +180,11 @@ const QuizAttempt = () => {
 
           <div className="flex items-center gap-1.5 w-full">
             {Array.from({ length: totalQuestions }).map((_, i) => {
-              const isPast = i <= currentQuestion;
+              // i < currentQuestion  → already answered → orange bar
+              // i >= currentQuestion → current or future → small dot
+              const isCompleted = i < currentQuestion;
 
-              return isPast ? (
+              return isCompleted ? (
                 <div
                   key={i}
                   className="h-1.5 flex-1 bg-[#F48C6A] rounded-full"
