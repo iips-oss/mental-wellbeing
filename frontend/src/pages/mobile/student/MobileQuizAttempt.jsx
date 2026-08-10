@@ -74,7 +74,15 @@ const MobileQuizAttempt = () => {
     );
   }
 
-  const questions = quiz.questions || [];
+  // FIX 1: normalize TABBPS grouped dict {"A": [...], "B": [...]}
+  // into a flat array — same fix as QuizAttempt.jsx
+  const rawQuestions = quiz?.questions;
+const questions = Array.isArray(rawQuestions)
+  ? rawQuestions
+  : rawQuestions && typeof rawQuestions === 'object'
+    ? Object.values(rawQuestions).flat()
+    : [];
+
   const totalQuestions = questions.length;
   const question = questions[currentQuestion];
 
@@ -173,9 +181,11 @@ const MobileQuizAttempt = () => {
 
           <div className="flex items-center gap-1.5 w-full">
             {Array.from({ length: totalQuestions }).map((_, i) => {
-              const isPast = i <= currentQuestion;
+              // FIX 2: i < currentQuestion so current question stays
+              // as a dot — only completed questions show as orange bars
+              const isCompleted = i < currentQuestion;
 
-              return isPast ? (
+              return isCompleted ? (
                 <div
                   key={i}
                   className="h-1.5 flex-1 bg-[#F48C6A] rounded-full"

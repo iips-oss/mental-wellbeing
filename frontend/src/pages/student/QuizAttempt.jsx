@@ -77,10 +77,13 @@ const QuizAttempt = () => {
   // Normalize to a flat array so the rest of the component works
   // identically for all quiz types. question.form is still on each
   // object so the submit handler can re-split A/B when needed.
-  const questions = Array.isArray(quiz.questions)
-    ? quiz.questions
-    : Object.values(quiz.questions).flat();
-  // ─────────────────────────────────────────────────────────────
+  const rawQuestions = quiz?.questions;
+const questions = Array.isArray(rawQuestions)
+  ? rawQuestions
+  : rawQuestions && typeof rawQuestions === 'object'
+    ? Object.values(rawQuestions).flat()
+    : [];
+  
 
   const totalQuestions = questions.length;
   const question = questions[currentQuestion];
