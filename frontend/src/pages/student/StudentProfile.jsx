@@ -3,6 +3,8 @@ import AuthService from "../../services/auth";
 import StudentService from "../../services/student";
 import { Mail, Phone, Calendar, CheckCircle2, Camera, Share2, Loader2 } from "lucide-react";
 import { toBlob } from "html-to-image";
+import { useToast } from "../../context/ToastContext";
+import { toTitleCase, formatCourseName, formatSemester } from "../../utils/textFormat";
 
 const EI_STRENGTH_MAP = {
   Self_Awareness: { label: "Self-aware", desc: "You understand your strengths" },
@@ -41,13 +43,15 @@ const StudentProfile = () => {
   const [journey, setJourney] = useState(
     JOURNEY_QUIZ_ORDER.map((q) => ({ ...q, completed: false, date: null }))
   );
+  const [profileError, setProfileError] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     AuthService.getMe()
       .then((data) => {
         setProfileInfo((prev) => ({
           ...prev,
-          name: data.name || prev.name,
+          name: data.name ? toTitleCase(data.name) : prev.name,
           email: data.email || prev.email,
           course: data.course || prev.course,
           year: data.semester || prev.year,
@@ -55,7 +59,10 @@ const StudentProfile = () => {
           phone: data.phone || prev.phone,
         }));
       })
-      .catch((err) => console.error(err));
+      .catch((err) => {
+        console.error(err);
+        setProfileError(true);
+      });
 
     const loadStats = async () => {
       try {
@@ -122,6 +129,8 @@ const StudentProfile = () => {
         setJourney(orderedJourney);
       } catch (err) {
         console.error("Failed to load profile stats:", err);
+        setProfileError(true);
+        toast.error("Couldn't load your profile — check your connection and try again.");
       }
     };
 
@@ -204,6 +213,18 @@ const StudentProfile = () => {
         </div>
       </div>
 
+      {profileError && (
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 flex items-center justify-between">
+          <span>Couldn't load your profile — check your connection and try again.</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="ml-4 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="flex gap-6 flex-1">
         {/* Left Column: Avatar & Summary Stats */}
         <div className="w-[320px] shrink-0 flex flex-col gap-6">
@@ -231,7 +252,11 @@ const StudentProfile = () => {
             </div>
 
             <h2 className="text-2xl font-semibold text-[#1E3A2F] font-serif mb-1">{profileInfo.name}</h2>
-            <p className="text-sm text-gray-500 font-medium">{profileInfo.course}, {profileInfo.year}</p>
+            <p className="text-sm text-gray-500 font-medium">
+              {formatCourseName(profileInfo.course)}
+              {profileInfo.course && profileInfo.year ? ", " : ""}
+              {formatSemester(profileInfo.year)}
+            </p>
             <p className="text-sm text-gray-500 font-medium mb-8">IIPS, DAVV, Indore</p>
 
             {/* TODO(backend): no formula/endpoint for profile completion — static placeholder */}
@@ -245,8 +270,8 @@ const StudentProfile = () => {
               </div>
             </div>
 
-            <div className="flex justify-between w-full border-t border-gray-100 pt-6">
-              <div className="flex flex-col items-center">
+            <div className="flex justify-between w-full border-t border-gray-100 pt-6 gap-2">
+              <div className="flex flex-col items-center flex-1 min-w-0">
                 <div className="w-10 h-10 bg-[#E8F3EB] rounded-xl flex items-center justify-center mb-2">
                   <svg className="w-5 h-5 text-[#2A523D]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                 </div>
@@ -254,7 +279,7 @@ const StudentProfile = () => {
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider text-center">Assessments<br />Completed</span>
               </div>
 
-              <div className="flex flex-col items-center">
+              <div className="flex flex-col items-center flex-1 min-w-0">
                 <div className="w-10 h-10 bg-[#F0EEFF] rounded-xl flex items-center justify-center mb-2">
                   <Calendar className="w-5 h-5 text-[#6B5AED]" />
                 </div>
@@ -262,7 +287,7 @@ const StudentProfile = () => {
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider text-center">Events<br />Joined</span>
               </div>
 
-              <div className="flex flex-col items-center">
+              <div className="flex flex-col items-center flex-1 min-w-0">
                 <div className="w-10 h-10 bg-[#FFF5E5] rounded-xl flex items-center justify-center mb-2">
                   <svg className="w-5 h-5 text-[#F5A623]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
                 </div>

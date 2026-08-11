@@ -308,11 +308,12 @@ const Register = () => {
                 className="w-full px-3 py-1.5 rounded-lg text-xs border border-gray-300 bg-gray-50 focus:bg-white focus:border-[#2F6F5E] focus:ring-4 focus:ring-[#2F6F5E]/20 outline-none transition"
               >
                 <option value="">Select Course</option>
-                <option value="M.Tech IT">M.Tech IT</option>
-                <option value="M.Tech CSE">M.Tech CSE</option>
-                <option value="MBA">MBA</option>
+                <option value="M.Tech CS">M.Tech (CS)</option>
+                <option value="M.Tech IT">M.Tech (IT)</option>
                 <option value="MCA">MCA</option>
-                <option value="B.Com">B.Com</option>
+                <option value="MBA Tourism">MBA (Tourism)</option>
+                <option value="MBA MS">MBA (MS)</option>
+                <option value="B.Com Hons">B.Com (Hons)</option>
               </select>
 
               {errors.course && (

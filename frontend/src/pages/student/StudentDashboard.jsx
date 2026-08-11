@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import AuthService from "../../services/auth";
 import StudentService from "../../services/student";
+import { useToast } from "../../context/ToastContext";
 import { Smile, Brain, ClipboardList, Calendar, Bell } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -23,6 +24,8 @@ const StudentDashboard = () => {
   const [personalityType, setPersonalityType] = useState(null); // TABBPS classification
   const [nextEvent, setNextEvent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState(false);
+  const toast = useToast();
   const [notifications, setNotifications] = useState([]);
   const [scqHistory, setScqHistory] = useState([]);
 const [currentScqScore, setCurrentScqScore] = useState(null);
@@ -91,6 +94,8 @@ const [latestScqDate, setLatestScqDate] = useState(null);
         setLatestScqDate(scqProgress.latest_event);
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
+        setDashboardError(true);
+        toast.error("Couldn't load your dashboard data — check your connection and try again.");
       } finally {
         setLoading(false);
       }
@@ -141,6 +146,18 @@ const [latestScqDate, setLatestScqDate] = useState(null);
         </div>
       </div>
 
+      {dashboardError && !loading && (
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 flex items-center justify-between">
+          <span>Couldn't load your dashboard data — check your connection and try again.</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="ml-4 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="flex gap-4 mb-6">
         {/* Wellbeing Status Card */}
         <div className="flex-1 bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex items-center gap-4">
@@ -150,7 +167,7 @@ const [latestScqDate, setLatestScqDate] = useState(null);
           <div>
             <div className="text-xs font-semibold text-gray-500 tracking-wide font-serif mb-1">Wellbeing Status</div>
             <div className="text-2xl font-semibold text-[#386641] font-sans">
-              {loading ? "…" : wellbeingStatus || "No data yet"}
+              {loading ? "…" : dashboardError ? "Couldn't load" : wellbeingStatus || "No data yet"}
             </div>
             <div className="text-xs text-[#386641] font-medium mt-1">Based on latest GWBS</div>
           </div>
@@ -164,7 +181,7 @@ const [latestScqDate, setLatestScqDate] = useState(null);
           <div>
             <div className="text-xs font-semibold text-gray-500 tracking-wide font-serif mb-1">Personality Type</div>
             <div className="text-2xl font-semibold text-[#386641] font-sans">
-              {loading ? "…" : personalityType || "No data yet"}
+              {loading ? "…" : dashboardError ? "Couldn't load" : personalityType || "No data yet"}
             </div>
             <div className="text-xs text-[#8A7B52] font-medium mt-1">Latest TABBPS</div>
           </div>
@@ -178,7 +195,7 @@ const [latestScqDate, setLatestScqDate] = useState(null);
           <div>
             <div className="text-xs font-semibold text-gray-500 tracking-wide font-serif mb-1">Assessments Completed</div>
             <div className="text-2xl font-semibold text-[#386641] font-sans">
-              {loading ? "…" : `${assessmentsCompleted} / ${TOTAL_ASSESSMENT_TYPES}`}
+              {loading ? "…" : dashboardError ? "Couldn't load" : `${assessmentsCompleted} / ${TOTAL_ASSESSMENT_TYPES}`}
             </div>
             <div className="text-xs text-[#F5A623] font-medium mt-1">This semester</div>
           </div>
@@ -192,7 +209,7 @@ const [latestScqDate, setLatestScqDate] = useState(null);
           <div>
             <div className="text-xs font-semibold text-gray-500 tracking-wide font-serif mb-1">Next Event</div>
             <div className="text-2xl font-semibold text-[#386641] font-sans truncate max-w-[120px]">
-              {loading ? "…" : nextEvent?.title || "None scheduled"}
+              {loading ? "…" : dashboardError ? "Couldn't load" : nextEvent?.title || "None scheduled"}
             </div>
             <div className="text-xs text-gray-500 font-medium mt-1">
               {nextEvent ? `${nextEvent.event_date} • ${nextEvent.event_time}` : ""}
