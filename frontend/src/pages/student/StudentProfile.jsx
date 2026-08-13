@@ -185,7 +185,7 @@ const StudentProfile = () => {
       }
     } catch (error) {
       console.error("Error generating snapshot:", error);
-      alert("Failed to generate snapshot. Please try again.");
+      toast.error("Failed to generate snapshot. Please try again.");
     } finally {
       setIsSharing(false);
     }
@@ -259,23 +259,14 @@ const StudentProfile = () => {
             </p>
             <p className="text-sm text-gray-500 font-medium mb-8">IIPS, DAVV, Indore</p>
 
-            {/* TODO(backend): no formula/endpoint for profile completion — static placeholder */}
-            <div className="w-full text-left mb-8">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-semibold text-[#2A523D]">Profile Completion</span>
-                <span className="text-xs font-semibold text-[#2A523D]">85%</span>
-              </div>
-              <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
-                <div className="bg-[#2A523D] h-full rounded-full" style={{ width: "85%" }}></div>
-              </div>
-            </div>
+            <div className="mb-2"></div>
 
             <div className="flex justify-between w-full border-t border-gray-100 pt-6 gap-2">
               <div className="flex flex-col items-center flex-1 min-w-0">
                 <div className="w-10 h-10 bg-[#E8F3EB] rounded-xl flex items-center justify-center mb-2">
                   <svg className="w-5 h-5 text-[#2A523D]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                 </div>
-                <span className="text-lg font-semibold text-[#1E3A2F]">{assessmentsCompleted}</span>
+                <span className="text-lg font-semibold text-[#1E3A2F]">{profileError ? "–" : assessmentsCompleted}</span>
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider text-center">Assessments<br />Completed</span>
               </div>
 
@@ -283,7 +274,7 @@ const StudentProfile = () => {
                 <div className="w-10 h-10 bg-[#F0EEFF] rounded-xl flex items-center justify-center mb-2">
                   <Calendar className="w-5 h-5 text-[#6B5AED]" />
                 </div>
-                <span className="text-lg font-semibold text-[#1E3A2F]">{eventsJoined}</span>
+                <span className="text-lg font-semibold text-[#1E3A2F]">{profileError ? "–" : eventsJoined}</span>
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider text-center">Events<br />Joined</span>
               </div>
 
@@ -292,7 +283,7 @@ const StudentProfile = () => {
                   <svg className="w-5 h-5 text-[#F5A623]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
                 </div>
                 <span className="text-sm font-semibold text-[#1E3A2F] mt-1 text-center leading-tight">
-                  {wellbeingStatus || "No data yet"}
+                  {profileError ? "Couldn't load" : wellbeingStatus || "No data yet"}
                 </span>
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider text-center mt-1">Wellbeing<br />Status</span>
               </div>
@@ -344,7 +335,11 @@ const StudentProfile = () => {
                   </div>
 
                   <div className="flex flex-col gap-5">
-                    {strengths.length > 0 ? (
+                    {profileError ? (
+                      <div className="text-sm text-red-500">
+                        Couldn't load your strengths — check your connection and try again.
+                      </div>
+                    ) : strengths.length > 0 ? (
                       strengths.map((s, i) => (
                         <div key={i} className="flex gap-3 items-start">
                           <div className="mt-0.5 bg-[#F3F9F5] p-1.5 rounded-lg text-[#3A7654]">
@@ -367,7 +362,7 @@ const StudentProfile = () => {
                 <div className="mt-auto pt-6 flex justify-between items-end relative z-10">
                   <div>
                     <h4 className="text-xl font-semibold text-[#1E3A2F] font-serif">
-                      {wellbeingStatus || "No data yet"}
+                      {profileError ? "Couldn't load" : wellbeingStatus || "No data yet"}
                     </h4>
                     <p className="text-xs text-gray-500 font-medium">You're doing great!</p>
                   </div>
@@ -416,10 +411,14 @@ const StudentProfile = () => {
                       <div className={`text-xs ${q.completed ? "text-gray-500" : "text-gray-400"}`}>{q.sub}</div>
                       <div
                         className={`mt-2 text-[10px] font-semibold px-2 py-1 rounded ${
-                          q.completed ? "bg-[#F3F9F5] text-[#3A7654]" : "bg-[#FFF5E5] text-[#F5A623]"
+                          profileError
+                            ? "bg-red-50 text-red-500"
+                            : q.completed
+                            ? "bg-[#F3F9F5] text-[#3A7654]"
+                            : "bg-[#FFF5E5] text-[#F5A623]"
                         }`}
                       >
-                        {q.completed ? q.date : "Upcoming"}
+                        {profileError ? "Couldn't load" : q.completed ? q.date : "Upcoming"}
                       </div>
                     </div>
                   ))}

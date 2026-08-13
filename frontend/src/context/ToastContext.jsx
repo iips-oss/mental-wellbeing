@@ -1,31 +1,42 @@
-import React, { createContext, useCallback, useContext, useState } from "react";
-import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 
 const ToastContext = createContext(null);
 
 const STYLES = {
   error: {
-    bg: "bg-red-50 border-red-200",
-    text: "text-red-700",
-    icon: <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />,
+    bg: "bg-[#FBEAEA] border-[#E8B4B4]",
+    text: "text-[#B33A3A]",
+    icon: <AlertCircle className="w-5 h-5 text-[#B33A3A] shrink-0" />,
+  },
+  warning: {
+    bg: "bg-[#FFF5E5] border-[#F5D9A8]",
+    text: "text-[#B4791F]",
+    icon: <AlertTriangle className="w-5 h-5 text-[#F5A623] shrink-0" />,
   },
   success: {
-    bg: "bg-green-50 border-green-200",
-    text: "text-green-700",
-    icon: <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />,
+    bg: "bg-[#F3F9F5] border-[#BFE0CB]",
+    text: "text-[#2A523D]",
+    icon: <CheckCircle2 className="w-5 h-5 text-[#3A7654] shrink-0" />,
   },
   info: {
-    bg: "bg-blue-50 border-blue-200",
-    text: "text-blue-700",
-    icon: <Info className="w-5 h-5 text-blue-500 shrink-0" />,
+    bg: "bg-[#F3F2F2] border-[#CBE0CF]",
+    text: "text-[#386641]",
+    icon: <Info className="w-5 h-5 text-[#386641] shrink-0" />,
   },
 };
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const timers = useRef(new Map());
 
   const dismiss = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
+    const timerId = timers.current.get(id);
+    if (timerId) {
+      clearTimeout(timerId);
+      timers.current.delete(id);
+    }
   }, []);
 
   const showToast = useCallback(
@@ -33,16 +44,27 @@ export const ToastProvider = ({ children }) => {
       const id = Date.now() + Math.random();
       setToasts((prev) => [...prev, { id, message, type }]);
       if (duration > 0) {
-        setTimeout(() => dismiss(id), duration);
+        const timerId = setTimeout(() => dismiss(id), duration);
+        timers.current.set(id, timerId);
       }
       return id;
     },
     [dismiss]
   );
 
+  // Clear any still-pending timers if the provider itself unmounts.
+  useEffect(() => {
+    const timersMap = timers.current;
+    return () => {
+      timersMap.forEach((timerId) => clearTimeout(timerId));
+      timersMap.clear();
+    };
+  }, []);
+
   const toast = {
     show: showToast,
     error: (message, opts) => showToast(message, { ...opts, type: "error" }),
+    warning: (message, opts) => showToast(message, { ...opts, type: "warning" }),
     success: (message, opts) => showToast(message, { ...opts, type: "success" }),
     info: (message, opts) => showToast(message, { ...opts, type: "info" }),
   };
