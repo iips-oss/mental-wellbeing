@@ -1,4 +1,4 @@
-from typing import Annotated, Optional, Literal, Any
+from typing import Annotated, Optional, Literal, Any, Union
 from datetime import datetime
 from pydantic import BaseModel, Field, ConfigDict
 # from uuid import UUID
@@ -75,10 +75,12 @@ class QuizQuestionOut(QuizQuestionBase):
 
 class QuizOut(BaseModel):
     quiz_template_id: str
-    quiz_type: str
+    quiz_type: QuizTypeStr
     title: str
     sequence_no: int
-    questions: list[QuizQuestionOut] = Field(default_factory=list)
+    questions: Union[list[QuizQuestionOut], dict[str, list[QuizQuestionOut]]]
+    # list[QuizQuestionOut]                    → SCQ, GWBS, EI (flat)
+    # dict[str, list[QuizQuestionOut]]         → TABBPS only, shape: {"A": [...], "B": [...]}
 
 # created for POST /quiz/submit...accepts a dict for TABBPS nested structure.
 class QuizSubmit(BaseModel):
