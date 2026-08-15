@@ -10,5 +10,6 @@ class NotificationOut(BaseModel):
     type: str
     event_id: Optional[str] = None
     created_at: datetime
+    is_read: bool = False
 
     model_config = ConfigDict(from_attributes=True)

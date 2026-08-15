@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 
 const ToastContext = createContext(null);
@@ -61,13 +61,16 @@ export const ToastProvider = ({ children }) => {
     };
   }, []);
 
-  const toast = {
-    show: showToast,
-    error: (message, opts) => showToast(message, { ...opts, type: "error" }),
-    warning: (message, opts) => showToast(message, { ...opts, type: "warning" }),
-    success: (message, opts) => showToast(message, { ...opts, type: "success" }),
-    info: (message, opts) => showToast(message, { ...opts, type: "info" }),
-  };
+  const toast = useMemo(
+    () => ({
+      show: showToast,
+      error: (message, opts) => showToast(message, { ...opts, type: "error" }),
+      warning: (message, opts) => showToast(message, { ...opts, type: "warning" }),
+      success: (message, opts) => showToast(message, { ...opts, type: "success" }),
+      info: (message, opts) => showToast(message, { ...opts, type: "info" }),
+    }),
+    [showToast]
+  );
 
   return (
     <ToastContext.Provider value={toast}>
@@ -81,7 +84,7 @@ export const ToastProvider = ({ children }) => {
             <div
               key={t.id}
               role="alert"
-              className={`flex items-start gap-3 rounded-xl border shadow-lg px-4 py-3 ${style.bg} animate-[fadeIn_0.2s_ease-out]`}
+              className={`flex items-start gap-3 rounded-xl border shadow-lg px-4 py-3 ${style.bg} animate-fade-in`}
             >
               {style.icon}
               <p className={`text-sm font-medium flex-1 ${style.text}`}>{t.message}</p>

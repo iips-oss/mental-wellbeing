@@ -12,6 +12,7 @@ from routes.student import router as student_router
 from routes.superuser import router as superuser_router
 from routes.notification import router as notifications_router
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 Base.metadata.create_all(bind=engine)
 
@@ -22,6 +23,19 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown(wait=False)
 
 app = FastAPI(title="Mental Well-Being Platform", lifespan=lifespan)
+
+
+class NoCacheMiddleware(BaseHTTPMiddleware):
+    """Prevents the browser from caching API responses by URL alone. Without
+    this, a GET response cached before a backend fix (or for a different
+    logged-in user) can keep being served stale/wrong data indefinitely,
+    since HTTP caching ignores the Authorization header by default."""
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+app.add_middleware(NoCacheMiddleware)
 
 origins=[
 "http://localhost:5173", 

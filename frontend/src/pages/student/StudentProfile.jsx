@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import AuthService from "../../services/auth";
 import StudentService from "../../services/student";
-import { Mail, Phone, Calendar, CheckCircle2, Camera, Share2, Loader2 } from "lucide-react";
+import { Mail, Phone, Calendar, CheckCircle2, Camera, Share2, Loader2, Hash, User } from "lucide-react";
 import { toBlob } from "html-to-image";
 import { useToast } from "../../context/ToastContext";
 import { toTitleCase, formatCourseName, formatSemester } from "../../utils/textFormat";
+import { Avatar, AvatarPicker } from "../../components/AvatarOptions";
 
 const EI_STRENGTH_MAP = {
   Self_Awareness: { label: "Self-aware", desc: "You understand your strengths" },
@@ -22,10 +23,11 @@ const JOURNEY_QUIZ_ORDER = [
 ];
 
 const StudentProfile = () => {
-  const fileInputRef = useRef(null);
   const snapshotRef = useRef(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [avatar, setAvatar] = useState(null);
+  const [avatarKey, setAvatarKey] = useState(null);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
 
   const [profileInfo, setProfileInfo] = useState({
     name: "Student",
@@ -44,105 +46,111 @@ const StudentProfile = () => {
     JOURNEY_QUIZ_ORDER.map((q) => ({ ...q, completed: false, date: null }))
   );
   const [profileError, setProfileError] = useState(false);
+  const [loading, setLoading] = useState(true);
   const toast = useToast();
 
-  useEffect(() => {
-    AuthService.getMe()
-      .then((data) => {
-        setProfileInfo((prev) => ({
-          ...prev,
-          name: data.name ? toTitleCase(data.name) : prev.name,
-          email: data.email || prev.email,
-          course: data.course || prev.course,
-          year: data.semester || prev.year,
-          enrollment: data.enrollment || prev.enrollment,
-          phone: data.phone || prev.phone,
-        }));
-      })
-      .catch((err) => {
-        console.error(err);
-        setProfileError(true);
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setProfileError(false);
+    try {
+      const [data, results, rsvps] = await Promise.all([
+        AuthService.getMe(),
+        StudentService.getMyResults(),
+        StudentService.getMyRsvps(),
+      ]);
+
+      setProfileInfo((prev) => ({
+        ...prev,
+        name: data.name ? toTitleCase(data.name) : prev.name,
+        email: data.email || prev.email,
+        course: data.course || prev.course,
+        year: data.semester || prev.year,
+        enrollment: data.enrollment || prev.enrollment,
+        phone: data.phone || prev.phone,
+      }));
+      setAvatarKey(data.avatar_key || null);
+
+      setAssessmentsCompleted((results || []).length);
+      setEventsJoined((rsvps || []).length);
+
+      const sorted = [...(results || [])].sort(
+        (a, b) => new Date(b.attempted_at) - new Date(a.attempted_at)
+      );
+
+      // Wellbeing status from latest GWBS
+      const latestGwbs = sorted.find((r) => r.quiz_type === "GWBS");
+      if (latestGwbs) {
+        setWellbeingStatus(
+          latestGwbs.overall_remark || latestGwbs.result_json?.interpretation || null
+        );
+      }
+
+      // Strength bullets from latest EI attempt
+      const latestEi = sorted.find((r) => r.quiz_type === "EI");
+      if (latestEi?.result_json?.competency_interpretations) {
+        const interps = latestEi.result_json.competency_interpretations;
+        const derived = Object.entries(interps)
+          .filter(([, value]) => value === "Strength")
+          .map(([key]) => EI_STRENGTH_MAP[key])
+          .filter(Boolean)
+          .slice(0, 3);
+        setStrengths(derived);
+      }
+
+      // Journey timeline: mark which quiz types have a submitted attempt
+      const withStatus = JOURNEY_QUIZ_ORDER.map((q) => {
+        const match = sorted.find((r) => r.quiz_type === q.code);
+        return {
+          ...q,
+          completed: !!match,
+          rawDate: match?.attempted_at || null,
+          date: match?.attempted_at
+            ? new Date(match.attempted_at).toLocaleDateString("en-GB", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })
+            : null,
+        };
       });
 
-    const loadStats = async () => {
-      try {
-        const [results, rsvps] = await Promise.all([
-          StudentService.getMyResults(),
-          StudentService.getMyRsvps(),
-        ]);
-
-        setAssessmentsCompleted((results || []).length);
-        setEventsJoined((rsvps || []).length);
-
-        const sorted = [...(results || [])].sort(
-          (a, b) => new Date(b.attempted_at) - new Date(a.attempted_at)
-        );
-
-        // Wellbeing status from latest GWBS
-        const latestGwbs = sorted.find((r) => r.quiz_type === "GWBS");
-        if (latestGwbs) {
-          setWellbeingStatus(
-            latestGwbs.overall_remark || latestGwbs.result_json?.interpretation || null
-          );
+      // Completed items first (earliest completed -> most recent), then
+      // remaining upcoming items in their original quiz-type order.
+      const orderedJourney = [...withStatus].sort((a, b) => {
+        if (a.completed && !b.completed) return -1;
+        if (!a.completed && b.completed) return 1;
+        if (a.completed && b.completed) {
+          return new Date(a.rawDate) - new Date(b.rawDate);
         }
+        return 0;
+      });
 
-        // Strength bullets from latest EI attempt
-        const latestEi = sorted.find((r) => r.quiz_type === "EI");
-        if (latestEi?.result_json?.competency_interpretations) {
-          const interps = latestEi.result_json.competency_interpretations;
-          const derived = Object.entries(interps)
-            .filter(([, value]) => value === "Strength")
-            .map(([key]) => EI_STRENGTH_MAP[key])
-            .filter(Boolean)
-            .slice(0, 3);
-          setStrengths(derived);
-        }
+      setJourney(orderedJourney);
+    } catch (err) {
+      console.error("Failed to load profile:", err);
+      setProfileError(true);
+      toast.error("Couldn't load your profile — check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
-        // Journey timeline: mark which quiz types have a submitted attempt
-        const withStatus = JOURNEY_QUIZ_ORDER.map((q) => {
-          const match = sorted.find((r) => r.quiz_type === q.code);
-          return {
-            ...q,
-            completed: !!match,
-            rawDate: match?.attempted_at || null,
-            date: match?.attempted_at
-              ? new Date(match.attempted_at).toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })
-              : null,
-          };
-        });
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
 
-        // Completed items first (earliest completed -> most recent), then
-        // remaining upcoming items in their original quiz-type order.
-        const orderedJourney = [...withStatus].sort((a, b) => {
-          if (a.completed && !b.completed) return -1;
-          if (!a.completed && b.completed) return 1;
-          if (a.completed && b.completed) {
-            return new Date(a.rawDate) - new Date(b.rawDate);
-          }
-          return 0;
-        });
-
-        setJourney(orderedJourney);
-      } catch (err) {
-        console.error("Failed to load profile stats:", err);
-        setProfileError(true);
-        toast.error("Couldn't load your profile — check your connection and try again.");
-      }
-    };
-
-    loadStats();
-  }, []);
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setAvatar(reader.result);
-      reader.readAsDataURL(file);
+  const handleSelectAvatar = async (id) => {
+    setSavingAvatar(true);
+    try {
+      await AuthService.updateProfile({ avatar_key: id });
+      setAvatarKey(id);
+      setShowAvatarPicker(false);
+      toast.success("Avatar updated.");
+    } catch (err) {
+      console.error("Failed to update avatar:", err);
+      toast.error("Couldn't save your avatar. Please try again.");
+    } finally {
+      setSavingAvatar(false);
     }
   };
 
@@ -214,10 +222,10 @@ const StudentProfile = () => {
       </div>
 
       {profileError && (
-        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 flex items-center justify-between">
+        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700 flex items-center justify-between">
           <span>Couldn't load your profile — check your connection and try again.</span>
           <button
-            onClick={() => window.location.reload()}
+            onClick={loadAll}
             className="ml-4 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 shrink-0"
           >
             Retry
@@ -225,31 +233,50 @@ const StudentProfile = () => {
         </div>
       )}
 
+      {loading ? (
+        <div className="flex gap-6 flex-1 animate-pulse">
+          <div className="w-[320px] shrink-0 bg-white rounded-3xl p-8 shadow-sm border border-gray-100 h-[420px]" />
+          <div className="flex-1 flex flex-col gap-6">
+            <div className="grid grid-cols-2 gap-6">
+              <div className="bg-white rounded-3xl h-64 shadow-sm border border-gray-100" />
+              <div className="bg-white rounded-3xl h-64 shadow-sm border border-gray-100" />
+            </div>
+            <div className="bg-white rounded-3xl h-48 shadow-sm border border-gray-100" />
+          </div>
+        </div>
+      ) : (
       <div className="flex gap-6 flex-1">
         {/* Left Column: Avatar & Summary Stats */}
         <div className="w-[320px] shrink-0 flex flex-col gap-6">
           <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 flex flex-col items-center text-center">
             <div
-              className="w-32 h-32 rounded-full bg-[#E8F3EB] flex items-center justify-center text-[#2A523D] text-5xl font-serif shadow-inner mb-4 relative cursor-pointer overflow-hidden group"
-              onClick={() => fileInputRef.current?.click()}
+              className="w-32 h-32 rounded-full mb-4 relative cursor-pointer overflow-hidden group"
+              onClick={() => setShowAvatarPicker(true)}
             >
-              {avatar ? (
-                <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                profileInfo.name.charAt(0)
-              )}
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Avatar avatarId={avatarKey} fallbackInitial={profileInfo.name.charAt(0)} size={128} className="w-full h-full" />
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
                 <Camera className="w-8 h-8 text-white" />
               </div>
-              {/* TODO(backend): no avatar upload endpoint — stored client-side only, lost on refresh */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleImageUpload}
-                accept="image/*"
-                className="hidden"
-              />
             </div>
+
+            {showAvatarPicker && (
+              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowAvatarPicker(false)}>
+                <div
+                  className="bg-white rounded-3xl p-6 shadow-xl max-w-sm w-full"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className="text-lg font-semibold text-[#1E3A2F] mb-4">Choose an avatar</h3>
+                  <AvatarPicker selectedId={avatarKey} onSelect={handleSelectAvatar} />
+                  {savingAvatar && <p className="text-xs text-gray-400 mt-4">Saving...</p>}
+                  <button
+                    onClick={() => setShowAvatarPicker(false)}
+                    className="mt-5 w-full text-sm font-semibold text-gray-500 hover:text-[#1E3A2F] py-2"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
 
             <h2 className="text-2xl font-semibold text-[#1E3A2F] font-serif mb-1">{profileInfo.name}</h2>
             <p className="text-sm text-gray-500 font-medium">
@@ -259,14 +286,12 @@ const StudentProfile = () => {
             </p>
             <p className="text-sm text-gray-500 font-medium mb-8">IIPS, DAVV, Indore</p>
 
-            <div className="mb-2"></div>
-
             <div className="flex justify-between w-full border-t border-gray-100 pt-6 gap-2">
               <div className="flex flex-col items-center flex-1 min-w-0">
                 <div className="w-10 h-10 bg-[#E8F3EB] rounded-xl flex items-center justify-center mb-2">
                   <svg className="w-5 h-5 text-[#2A523D]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                 </div>
-                <span className="text-lg font-semibold text-[#1E3A2F]">{profileError ? "–" : assessmentsCompleted}</span>
+                <span className="text-lg font-semibold text-[#1E3A2F]">{profileError ? "—" : assessmentsCompleted}</span>
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider text-center">Assessments<br />Completed</span>
               </div>
 
@@ -274,7 +299,7 @@ const StudentProfile = () => {
                 <div className="w-10 h-10 bg-[#F0EEFF] rounded-xl flex items-center justify-center mb-2">
                   <Calendar className="w-5 h-5 text-[#6B5AED]" />
                 </div>
-                <span className="text-lg font-semibold text-[#1E3A2F]">{profileError ? "–" : eventsJoined}</span>
+                <span className="text-lg font-semibold text-[#1E3A2F]">{profileError ? "—" : eventsJoined}</span>
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider text-center">Events<br />Joined</span>
               </div>
 
@@ -283,7 +308,7 @@ const StudentProfile = () => {
                   <svg className="w-5 h-5 text-[#F5A623]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
                 </div>
                 <span className="text-sm font-semibold text-[#1E3A2F] mt-1 text-center leading-tight">
-                  {profileError ? "Couldn't load" : wellbeingStatus || "No data yet"}
+                  {profileError ? "—" : wellbeingStatus || "No data yet"}
                 </span>
                 <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider text-center mt-1">Wellbeing<br />Status</span>
               </div>
@@ -295,29 +320,33 @@ const StudentProfile = () => {
         <div className="flex-1 flex flex-col">
           <div className="flex flex-col gap-6 overflow-y-auto pb-8 pr-2">
             <div className="grid grid-cols-2 gap-6">
-              {/* About Me */}
+              {/* Personal Info */}
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col">
-                <h3 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A2F] mb-4">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                  About Me
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-[#1E3A2F] mb-6">
+                  <User className="w-5 h-5" strokeWidth={2} />
+                  Personal Info
                 </h3>
-                <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-                  I'm passionate about building a balanced life and continuously working on my mental and emotional well-being.
-                </p>
 
-                <div className="flex flex-col gap-4 mt-auto">
+                <div className="flex-1 flex flex-col justify-center gap-7">
                   <div className="flex items-start gap-3">
                     <Mail className="w-4 h-4 text-gray-400 mt-0.5" />
                     <div>
                       <div className="text-xs font-semibold text-gray-400 mb-0.5">Email</div>
-                      <div className="text-sm font-medium text-[#1E3A2F]">{profileInfo.email}</div>
+                      <div className="text-sm font-medium text-[#1E3A2F]">{profileError ? "—" : profileInfo.email}</div>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
                     <Phone className="w-4 h-4 text-gray-400 mt-0.5" />
                     <div>
                       <div className="text-xs font-semibold text-gray-400 mb-0.5">Phone</div>
-                      <div className="text-sm font-medium text-[#1E3A2F]">{profileInfo.phone || "Not provided"}</div>
+                      <div className="text-sm font-medium text-[#1E3A2F]">{profileError ? "—" : profileInfo.phone || "Not provided"}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Hash className="w-4 h-4 text-gray-400 mt-0.5" />
+                    <div>
+                      <div className="text-xs font-semibold text-gray-400 mb-0.5">Enrollment No.</div>
+                      <div className="text-sm font-medium text-[#1E3A2F]">{profileError ? "—" : profileInfo.enrollment || "Not provided"}</div>
                     </div>
                   </div>
                 </div>
@@ -336,9 +365,7 @@ const StudentProfile = () => {
 
                   <div className="flex flex-col gap-5">
                     {profileError ? (
-                      <div className="text-sm text-red-500">
-                        Couldn't load your strengths — check your connection and try again.
-                      </div>
+                      <div className="text-sm text-gray-400">—</div>
                     ) : strengths.length > 0 ? (
                       strengths.map((s, i) => (
                         <div key={i} className="flex gap-3 items-start">
@@ -362,7 +389,7 @@ const StudentProfile = () => {
                 <div className="mt-auto pt-6 flex justify-between items-end relative z-10">
                   <div>
                     <h4 className="text-xl font-semibold text-[#1E3A2F] font-serif">
-                      {profileError ? "Couldn't load" : wellbeingStatus || "No data yet"}
+                      {profileError ? "—" : wellbeingStatus || "No data yet"}
                     </h4>
                     <p className="text-xs text-gray-500 font-medium">You're doing great!</p>
                   </div>
@@ -412,13 +439,13 @@ const StudentProfile = () => {
                       <div
                         className={`mt-2 text-[10px] font-semibold px-2 py-1 rounded ${
                           profileError
-                            ? "bg-red-50 text-red-500"
+                            ? "bg-gray-100 text-gray-400"
                             : q.completed
                             ? "bg-[#F3F9F5] text-[#3A7654]"
                             : "bg-[#FFF5E5] text-[#F5A623]"
                         }`}
                       >
-                        {profileError ? "Couldn't load" : q.completed ? q.date : "Upcoming"}
+                        {profileError ? "—" : q.completed ? q.date : "Upcoming"}
                       </div>
                     </div>
                   ))}
@@ -428,6 +455,7 @@ const StudentProfile = () => {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

@@ -193,6 +193,11 @@ def update_me(
         if not hasattr(current_user, "department"):
             raise HTTPException(status_code=400, detail="This account type does not support a department field")
         current_user.department = data.department
+
+    if data.avatar_key is not None:
+        if not hasattr(current_user, "avatar_key"):
+            raise HTTPException(status_code=400, detail="This account type does not support an avatar")
+        current_user.avatar_key = data.avatar_key
     try:
         db.commit()
     except IntegrityError:
@@ -214,6 +219,7 @@ def update_me(
         "semester": getattr(current_user, "semester", None),
         "session": getattr(current_user, "session", None),
         "enrollment": getattr(current_user, "enrollment_no", None),
+        "avatar_key": getattr(current_user, "avatar_key", None),
     }
 
 @router.get("/me")
@@ -229,4 +235,5 @@ def get_me(current_user=Depends(get_current_user)):
         "session": getattr(current_user, "session", None),
         "enrollment": getattr(current_user, "enrollment_no", None),
         "phone": getattr(current_user, "phone", None),   # NEW
+        "avatar_key": getattr(current_user, "avatar_key", None),
     }

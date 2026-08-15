@@ -12,6 +12,7 @@ const QuizAttempt = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [answerError, setAnswerError] = useState("");
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -87,15 +88,17 @@ const QuizAttempt = () => {
       ...prev,
       [questionId]: optionId,
     }));
+
+    setAnswerError("");
   };
 
   const handleNext = async () => {
     if (!selectedAnswer) {
-      setError("Please select an answer before continuing.");
+      setAnswerError("Please select an answer before continuing.");
       return;
     }
 
-    setError("");
+    setAnswerError("");
 
     if (currentQuestion < totalQuestions - 1) {
       setCurrentQuestion((prev) => prev + 1);
@@ -132,7 +135,7 @@ const QuizAttempt = () => {
       navigate(`/student/quizzes/${attemptId}/results`);
     } catch (err) {
       console.error("Failed to submit quiz:", err);
-      setError(
+      setAnswerError(
         err.response?.data?.detail || "Failed to submit quiz."
       );
     } finally {
@@ -141,7 +144,7 @@ const QuizAttempt = () => {
   };
 
   const handlePrev = () => {
-    setError("");
+    setAnswerError("");
 
     if (currentQuestion > 0) {
       setCurrentQuestion((prev) => prev - 1);
@@ -212,8 +215,8 @@ const QuizAttempt = () => {
           })}
         </div>
 
-        {error && (
-          <p className="text-red-500 text-sm mb-4">{error}</p>
+        {answerError && (
+          <p className="text-red-500 text-sm mb-4">{answerError}</p>
         )}
 
         <div className="flex justify-between items-center pt-4 border-t border-black/10">

@@ -88,6 +88,14 @@ getNotifications: async () => {
   const response = await API.get("/notifications/");
   return response.data;
 },
+markNotificationRead: async (notificationId) => {
+  const response = await API.post(`/notifications/${notificationId}/read`);
+  return response.data;
+},
+markAllNotificationsRead: async () => {
+  const response = await API.post("/notifications/mark-all-read");
+  return response.data;
+},
 updateEvent: async (eventId, eventData) => {
   const response = await API.patch(`/admin/events/${eventId}`, eventData);
   return response.data;
