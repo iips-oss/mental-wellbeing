@@ -3,9 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import logo from "../../assets/icons/logo.png";
 import API from "../../api/axios";
+import { useToast } from "../../context/ToastContext";
 
 const Register = () => {
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -101,10 +103,10 @@ const Register = () => {
         password: formData.password,
       });
 
-      alert("Registration Successful");
+      toast.success("Registration successful! Redirecting to login...");
       navigate("/login");
     } catch (err) {
-      alert(err.response?.data?.detail || "Registration Failed");
+      toast.error(err.response?.data?.detail || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -308,11 +310,12 @@ const Register = () => {
                 className="w-full px-3 py-1.5 rounded-lg text-xs border border-gray-300 bg-gray-50 focus:bg-white focus:border-[#2F6F5E] focus:ring-4 focus:ring-[#2F6F5E]/20 outline-none transition"
               >
                 <option value="">Select Course</option>
-                <option value="M.Tech IT">M.Tech IT</option>
-                <option value="M.Tech CSE">M.Tech CSE</option>
-                <option value="MBA">MBA</option>
+                <option value="M.Tech CS">M.Tech (CS)</option>
+                <option value="M.Tech IT">M.Tech (IT)</option>
                 <option value="MCA">MCA</option>
-                <option value="B.Com">B.Com</option>
+                <option value="MBA Tourism">MBA (Tourism)</option>
+                <option value="MBA MS">MBA (MS)</option>
+                <option value="B.Com Hons">B.Com (Hons)</option>
               </select>
 
               {errors.course && (

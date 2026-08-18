@@ -19,6 +19,7 @@ class Student(Base):
     semester = Column(Integer, nullable=False)
     session = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
+    avatar_key = Column(String, nullable=True)  # id from AVATAR_OPTIONS, e.g. "sprout"; null = show initial
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # relationships

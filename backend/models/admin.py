@@ -21,3 +21,4 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     department: Optional[str] = None
+    avatar_key: Optional[str] = None

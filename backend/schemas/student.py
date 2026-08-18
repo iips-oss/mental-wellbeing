@@ -38,6 +38,7 @@ class StudentOut(BaseModel):
     course: str
     semester: int
     session: str
+    avatar_key: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -47,16 +48,28 @@ class StudentOut(BaseModel):
 # Custom types specifically for update validation
 PhoneNum = Annotated[str, Field(min_length=10, max_length=15, pattern=r"^\+?[0-9]+$")]
 
+# Keep this in sync with AVATAR_OPTIONS ids in frontend/src/components/AvatarOptions.jsx
+VALID_AVATAR_KEYS = {"sprout", "sun", "moon", "breeze", "short-crop", "buzzcut", "curls", "ponytail", "bun", "waves"}
+
 class StudentUpdate(BaseModel):
     roll_number: Annotated[Optional[str], Field(default=None, min_length=4, max_length=50, strip_whitespace=True)]
     phone: Optional[PhoneNum] = None
     semester: Annotated[Optional[int], Field(default=None, ge=1, le=10)]
+    avatar_key: Optional[str] = None
     @field_validator("roll_number")
     @classmethod
     def check_roll_number(cls, v):
         if v is None:
             return v
         return validate_roll_number_format(v)
+    @field_validator("avatar_key")
+    @classmethod
+    def check_avatar_key(cls, v):
+        if v is None:
+            return v
+        if v not in VALID_AVATAR_KEYS:
+            raise ValueError(f"Invalid avatar_key. Must be one of: {sorted(VALID_AVATAR_KEYS)}")
+        return v
 # added for student dashboard route requirements
 class DashboardSummary(BaseModel):
     total_rsvps: int

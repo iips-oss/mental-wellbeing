@@ -2,25 +2,26 @@ import React, { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { LayoutDashboard, Calendar, FileText, User, LogOut } from "lucide-react";
 import AuthService from "../services/auth";
+import { toTitleCase, formatCourseName } from "../utils/textFormat";
 
 const StudentLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [studentInfo, setStudentInfo] = useState({
-    name: "Anirudh Saksena",
-    course: "Bachelors Computer Applications"
-  });
+  const [studentInfo, setStudentInfo] = useState(null); // null = still loading
+  const [profileError, setProfileError] = useState(false);
 
   useEffect(() => {
     AuthService.getMe()
       .then((data) => {
         setStudentInfo({
-          name: data.name || "Anirudh Saksena",
-          course: data.course || "Bachelors Computer Applications"
+          name: data.name ? toTitleCase(data.name) : "Student",
+          course: formatCourseName(data.course)
         });
+        setProfileError(false);
       })
       .catch((err) => {
         console.error("Error fetching student profile info:", err);
+        setProfileError(true);
       });
   }, []);
 
@@ -89,12 +90,22 @@ const StudentLayout = () => {
               <User className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h4 className="text-sm font-semibold truncate text-[#FBEBC3]" title={studentInfo.name}>
-                {studentInfo.name}
-              </h4>
-              <p className="text-[10px] text-[#8AA38E] truncate" title={studentInfo.course}>
-                {studentInfo.course}
-              </p>
+              {profileError ? (
+                <h4 className="text-sm font-semibold truncate text-red-300">
+                  Couldn't load profile
+                </h4>
+              ) : studentInfo ? (
+                <>
+                  <h4 className="text-sm font-semibold truncate text-[#FBEBC3]" title={studentInfo.name}>
+                    {studentInfo.name}
+                  </h4>
+                  <p className="text-[10px] text-[#8AA38E] truncate" title={studentInfo.course}>
+                    {studentInfo.course}
+                  </p>
+                </>
+              ) : (
+                <h4 className="text-sm font-semibold truncate text-[#8AA38E]">Loading…</h4>
+              )}
             </div>
           </div>
           <button

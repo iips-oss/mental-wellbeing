@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import get_db
 from models.event import Event, EventRSVP
 from models.student import Student
@@ -100,9 +101,27 @@ def show_dashboard(
         EventRSVP.student_id == current_user.id
     ).count()
 
-    total_quizzes = db.query(QuizAttempt).filter(
+    # Count DISTINCT quiz types completed, not raw attempts — a student can
+    # retake the same quiz type (e.g. SCQ multiple times across events), and
+    # counting raw attempts let this exceed the fixed set of 4 quiz types
+    # (previously showed things like "6 / 4", which is nonsensical).
+    #
+    # Normalize casing/whitespace before comparing: legacy QuizTemplate rows
+    # (created before validation was tightened, or via raw seed/test data)
+    # may have inconsistent casing like "Scq" or "TABBPS " — these are the
+    # same quiz type but wouldn't dedupe under a plain string .distinct().
+    normalized_type = func.upper(func.trim(QuizTemplate.quiz_type))
+    total_quizzes = db.query(QuizAttempt.quiz_template_id).join(
+        QuizTemplate, QuizAttempt.quiz_template_id == QuizTemplate.id
+    ).filter(
         QuizAttempt.student_id == current_user.id
-    ).count()
+    ).with_entities(
+        normalized_type
+    ).distinct().count()
+
+    # Hard safety cap: there are only 4 quiz types in the whole system, full
+    # stop. No matter what the data says, the UI must never show more than 4.
+    total_quizzes = min(total_quizzes, 4)
 
     return {
         "student": info,

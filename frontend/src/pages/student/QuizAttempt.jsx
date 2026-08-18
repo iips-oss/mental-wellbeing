@@ -12,6 +12,7 @@ const QuizAttempt = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [answerError, setAnswerError] = useState("");
 
   useEffect(() => {
     const fetchQuiz = async () => {
@@ -78,12 +79,11 @@ const QuizAttempt = () => {
   // identically for all quiz types. question.form is still on each
   // object so the submit handler can re-split A/B when needed.
   const rawQuestions = quiz?.questions;
-const questions = Array.isArray(rawQuestions)
-  ? rawQuestions
-  : rawQuestions && typeof rawQuestions === 'object'
+  const questions = Array.isArray(rawQuestions)
+    ? rawQuestions
+    : rawQuestions && typeof rawQuestions === "object"
     ? Object.values(rawQuestions).flat()
     : [];
-  
 
   const totalQuestions = questions.length;
   const question = questions[currentQuestion];
@@ -100,15 +100,17 @@ const questions = Array.isArray(rawQuestions)
       ...prev,
       [questionId]: optionId,
     }));
+
+    setAnswerError("");
   };
 
   const handleNext = async () => {
     if (!selectedAnswer) {
-      setError("Please select an answer before continuing.");
+      setAnswerError("Please select an answer before continuing.");
       return;
     }
 
-    setError("");
+    setAnswerError("");
 
     if (currentQuestion < totalQuestions - 1) {
       setCurrentQuestion((prev) => prev + 1);
@@ -145,7 +147,7 @@ const questions = Array.isArray(rawQuestions)
       navigate(`/student/quizzes/${attemptId}/results`);
     } catch (err) {
       console.error("Failed to submit quiz:", err);
-      setError(
+      setAnswerError(
         err.response?.data?.detail || "Failed to submit quiz."
       );
     } finally {
@@ -154,7 +156,7 @@ const questions = Array.isArray(rawQuestions)
   };
 
   const handlePrev = () => {
-    setError("");
+    setAnswerError("");
 
     if (currentQuestion > 0) {
       setCurrentQuestion((prev) => prev - 1);
@@ -181,24 +183,14 @@ const questions = Array.isArray(rawQuestions)
             Question {currentQuestion + 1} / {totalQuestions}
           </p>
 
-          <div className="flex items-center gap-1.5 w-full">
-            {Array.from({ length: totalQuestions }).map((_, i) => {
-              // i < currentQuestion  → already answered → orange bar
-              // i >= currentQuestion → current or future → small dot
-              const isCompleted = i < currentQuestion;
-
-              return isCompleted ? (
-                <div
-                  key={i}
-                  className="h-1.5 flex-1 bg-[#F48C6A] rounded-full"
-                />
-              ) : (
-                <div
-                  key={i}
-                  className="w-1.5 h-1.5 bg-[#9DB1A3] rounded-full flex-shrink-0"
-                />
-              );
-            })}
+          {/* Single continuous progress bar */}
+          <div className="w-full h-1.5 bg-[#E1EAE3] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#F48C6A] rounded-full transition-all duration-300"
+              style={{
+                width: `${((currentQuestion + 1) / totalQuestions) * 100}%`,
+              }}
+            />
           </div>
         </div>
 
@@ -227,8 +219,8 @@ const questions = Array.isArray(rawQuestions)
           })}
         </div>
 
-        {error && (
-          <p className="text-red-500 text-sm mb-4">{error}</p>
+        {answerError && (
+          <p className="text-red-500 text-sm mb-4">{answerError}</p>
         )}
 
         <div className="flex justify-between items-center pt-4 border-t border-black/10">
