@@ -1,36 +1,6 @@
-import axios from "axios";
-
-const API = axios.create({
-  baseURL: "http://localhost:8000",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Request interceptor to automatically attach authorization token
-API.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Response interceptor to handle unauthorized errors
-API.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("role");
-    }
-    return Promise.reject(error);
-  }
-);
-
-export default API;
+// This file previously duplicated api/axios.js with a hardcoded baseURL
+// (breaking in any non-localhost deployment) and was missing the 401
+// auto-logout interceptor that the other copy had. Now there's exactly one
+// real axios instance — this just re-exports it, so every existing import
+// of "services/api" keeps working unchanged.
+export { default } from "../api/axios";

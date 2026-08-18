@@ -3,9 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import logo from "../../assets/icons/logo.png";
 import API from "../../api/axios";
+import { useToast } from "../../context/ToastContext";
 
 const Register = () => {
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -101,10 +103,10 @@ const Register = () => {
         password: formData.password,
       });
 
-      alert("Registration Successful");
+      toast.success("Registration successful! Redirecting to login...");
       navigate("/login");
     } catch (err) {
-      alert(err.response?.data?.detail || "Registration Failed");
+      toast.error(err.response?.data?.detail || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }

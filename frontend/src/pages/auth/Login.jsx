@@ -3,9 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import logo from "../../assets/icons/logo.png";
 import API from "../../api/axios";
+import { useToast } from "../../context/ToastContext";
 
 const Login = () => {
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -89,7 +91,7 @@ const Login = () => {
           navigate("/");
       }
     } catch (err) {
-      alert(err.response?.data?.detail || "Invalid Email or Password");
+      toast.error(err.response?.data?.detail || "Invalid email or password.");
     } finally {
       setLoading(false);
     }
